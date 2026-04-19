@@ -37,7 +37,7 @@ body { background-color: var(--bg-gray-rh); }
 .btn-grupo-flotante:hover { opacity: 1; transform: scale(1); }
 
 @media (max-width: 768px) {
-    .top-navbar .dropdown { display: none !important; }
+
 
     .main-workspace { flex-direction: column !important; height: calc(100dvh - 65px - 75px) !important; padding: 0 !important; overflow: hidden !important; position: relative;}
     .content-area { width: 100% !important; height: 100% !important; padding: 15px !important; display: flex; flex-direction: column; }

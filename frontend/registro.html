@@ -4,6 +4,7 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>UTM</title>
+         <link rel="icon" type="image/x-icon" href="../imagenes/verdes/favicon.ico" />
         <style>
             body{
                 text-align: center;
@@ -81,6 +82,9 @@
     <body>
         <form id="formulario" action="/my-handling-form-page" method="post">
             <p>
+                <label>Bienvenido al registro para probar nuestro sistema, ingresa tus datos basicos para continuar</label>
+            </p>
+            <p>
                 <label for="name">nombre:</label>
                 <input type="text" id="name" name="user_name" />
             </p>
@@ -109,13 +113,17 @@
                 </select>
             </p>
             <p class="button">
-                <button type="submit">Registrar</button>
+                <button type="submit">REGISTRAR</button>
             </p>
-            <label>Los datos extras del docente se omitiran por ahora para agilizar el registro</label>
+            
+            <label>*Los datos extras del docente se omitiran por ahora para agilizar el registro (ej, RFC, Fecha ingreso, Categoria, Tipo de contrato)</label>
+            <p>
+                Si deseas un registro completo, da click <a href="registroAv.html">aqui</a>
+            </p>
         </form>
         <p class="button">
     <a href="login.html">
-        <button type="button">Saltar proceso</button>
+        <button type="button">saltar proceso</button>
     </a>
 </p>
     <script src="js/registro.js"></script>

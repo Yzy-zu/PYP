@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
 //creamos la ventana modal de los detalles
     modalDetalle = new bootstrap.Modal(document.getElementById('modalDetalleSolicitud'));
 //ponemos el nombre del jefe en la pantalla
-    document.getElementById('saludo-jefe').textContent = usuario.nombre_completo || "Subdirector";
+    document.getElementById('saludo-jefe').textContent = `Directivo: ${usuario.nombre_completo}` || "Directivo";
 
 //configuramos el boton para salir de la cuenta
     document.getElementById('btn-logout').addEventListener('click', () => {

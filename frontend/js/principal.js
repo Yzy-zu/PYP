@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     modalSemanaFABInstancia = new bootstrap.Modal(document.getElementById('modalSemanaFAB'));
     modalDetalleDocenteInstancia = new bootstrap.Modal(document.getElementById('modalDetalleDocente'));
     //ponemos el nombre del profe en el texto de saludo
-    document.getElementById('saludo-profesor').textContent = usuario.nombre_completo || "Docente";
+    document.getElementById('saludo-profesor').textContent = `Docente: ${usuario.nombre_completo}` || "Docente";
     modalConfirmacionInstancia = new bootstrap.Modal(document.getElementById('modalConfirmacion'));
     modalPerfilInstancia = new bootstrap.Modal(document.getElementById('modalPerfil'));
     //configuramos el clic para ver el perfil

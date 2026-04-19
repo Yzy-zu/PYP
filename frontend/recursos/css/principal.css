@@ -59,7 +59,7 @@
 }
 
 @media (max-width: 768px) {
-    .top-navbar .dropdown { display: none !important; }
+
     
     .main-workspace { 
         flex-direction: column !important; 

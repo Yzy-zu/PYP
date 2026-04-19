@@ -1,42 +1,54 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login</title>
-    
-    <link rel="icon" type="image/png" sizes="32x32" href="/imagenes/favicon_io/favicon-32x32.png">
-    <link rel="stylesheet" href="recursos/css/estilos.css">
-    <link rel="stylesheet" href="recursos/css/login.css">
-    
-</head>
-<body>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Login</title>
 
-    <div class="main-wrapper">
-        <section id="loginsection">
-            <div class="logo-container">
-                <img src="imagenes/utm_logo.svg" alt="Logo Escuela" class="school-logo">
+        <link rel="icon" type="image/png" sizes="32x32"
+            href="imagenes/verdes/favicon-32x32.png">
+        <link rel="stylesheet" href="recursos/css/estilos.css">
+        <link rel="stylesheet" href="recursos/css/login.css">
+
+    </head>
+    <body>
+
+        <div class="main-wrapper">
+            <section id="loginsection">
+                
+                <div class="logo-container"
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 0 20px;">
+                    <img src="imagenes/utm_logo.svg" alt="Logo Escuela"
+                        width="100">
+                    <img src="imagenes/sys_logo.png" alt="Logo Escuela"
+                        width="80">
+                </div>
+                <label
+                    style="display: block; text-align: center; font-size: 20px; font-weight: bold; margin-top: 0px;">
+                    Iniciar Sesion en Pases y Permisos UTM
+                </label>
+                <h1 class="form-title"></h1>
+                
+                <form id="loginform" novalidate>
+                    <div class="input-box">
+                        <label></label>
+                        <input type="email" id="correo" placeholder="Correo Institucional"
+                            required>
+                        <span class="error" id="correoerror"></span>
+                    </div>
+
+                    <div class="input-box">
+                        <label></label>
+                        <input type="password" id="password"
+                            placeholder="Contraseña" required>
+                        <span class="error" id="contraseñaerror"></span>
+                    </div>
+
+                    <button type="submit" class="submit-btn">Iniciar Sesion</button>
+                </form>
+            </section>
         </div>
-            <h1 class="form-title"></h1>
-            
-            <form id="loginform" novalidate>
-                <div class="input-box">
-                    <label>Correo Institucional</label>
-                    <input type="email" id="correo" placeholder="correo" required>
-                    <span class="error" id="correoerror"></span>
-                </div>
 
-                <div class="input-box">
-                    <label>Contraseña</label>
-                    <input type="password" id="password" placeholder="••••••••" required>
-                    <span class="error" id="contraseñaerror"></span>
-                </div>
-
-                <button type="submit" class="submit-btn">Login</button>
-            </form>
-        </section>
-    </div>
-
-    <script src="js/login.js"></script>
-</body>
+        <script src="js/login.js"></script>
+    </body>
 </html>

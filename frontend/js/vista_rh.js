@@ -57,7 +57,8 @@ function mostrarToast(mensaje, tipo = 'success') {
 //cuando la pagina este lista arrancamos todo
 document.addEventListener('DOMContentLoaded', () => {
     modalDetalleRH = new bootstrap.Modal(document.getElementById('modalDetalleRH'));
-    document.getElementById('saludo-rh').textContent = usuario.nombre_completo || "RRHH";
+    document.getElementById('saludo-rh').textContent = `RH: ${usuario.nombre_completo}` || "RRHH";
+   
     inicializarMotorPDF();
 
 //configuramos el boton para salir de la cuenta

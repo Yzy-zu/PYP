@@ -5,6 +5,10 @@ const correo = document.getElementById('mail');
 const fecha = document.getElementById('date');
 const contra = document.getElementById('pass');
 const categoria = document.getElementById('categoria');
+const rfc = document.getElementById('rfc');
+const fechaI = document.getElementById('date_ingreso');
+const tipo = document.getElementById('tipo');
+const contrato = document.getElementById('contrato');
 
 
 formulario.addEventListener('submit', async (event) => {
@@ -16,11 +20,11 @@ formulario.addEventListener('submit', async (event) => {
         contraseña: contra.value,
         rol: "Docente",
         fecha_nacimiento: fecha.value,
-        rfc: "FERF450822FB1",
-        fecha_ingreso: "2009-12-12",
-        categoria: "Profesor de Asignatura",
+        rfc: rfc ? rfc.value : "FERF450822FB1",
+        fecha_ingreso: fechaI ? fechaI.value : "2009-12-12",
+        categoria: tipo ? tipo.value : "Profesor de Asignatura",
         area_adscripcion: categoria.value,
-        tipo_contrato: "Determinado"
+        tipo_contrato: contrato ? contrato.value : "Determinado"
     };
     try {
         const envio = await fetch(`${API}/usuarios`, {

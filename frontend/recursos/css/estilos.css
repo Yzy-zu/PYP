@@ -96,7 +96,7 @@ html, body {
 .modal { z-index: 9999 !important; }
 .modal-backdrop { z-index: 9998 !important; }
 
-/* --- Mejoras Premium FullCalendar --- */
+/* --- Mejoras FullCalendar --- */
 :root {
     --fc-border-color: #f0f2f5; 
 }
@@ -136,7 +136,7 @@ html, body {
 .fc-event {
     border-radius: 6px !important;
     padding: 4px 6px !important;
-    font-size: 0.70rem !important;
+    font-size: 1rem !important;
     font-weight: 700 !important;
     box-shadow: 0 2px 5px rgba(0,0,0,0.08);
     border: none !important;
@@ -148,7 +148,7 @@ html, body {
     transform: scale(1.02);
 }
 
-/* --- Premium UI (Components) --- */
+/* --- UI (Components) --- */
 .card {
     border-radius: 16px !important;
     border: none !important;
@@ -266,6 +266,19 @@ html, body {
 }
 
 @media (max-width: 768px) {
+    .top-navbar { padding: 0 15px !important; }
+    .top-navbar img { height: 20px !important; }
+    
+    #userMenu { max-width: 55vw; }
+    #userMenu span {
+        display: inline-block;
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 0.8rem;
+    }
+    #userMenu i { font-size: 1.5rem !important; margin-right: 5px !important; }
     .fc .fc-toolbar-title {
         font-size: 1.25rem !important;
         font-weight: 800 !important;
@@ -273,7 +286,7 @@ html, body {
         color: var(--utm-teal);
         text-transform: capitalize;
     }
-    .fc-event-time { display: none !important; } /* Ocultar horas que saturan la celda */
+    .fc-event-time { display: none !important; }
     
     .fc-header-toolbar {
         margin-bottom: 15px !important;
