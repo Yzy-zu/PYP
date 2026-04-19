@@ -37,7 +37,7 @@ async function pdfPase(datosPase, usuario) {
     escribirTexto('pdf-motivo-texto', datosPase.motivo || 'COMISIÓN / PERSONAL');
     //firma
     escribirTexto('val-firma-vo-bo', datosPase.revisado_por_nombre || "AUTORIZADO DIGITAL");
-
+console.log("DATOS QUE LLEGAN AL PDF:", datos);
     const elemento = document.getElementById('molde-pase-salida');
     const canvas = await html2canvas(elemento, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     
@@ -93,7 +93,7 @@ async function pdfPermiso(datos, usuario) {
     //directivos
     escribirTexto('p-pdf-jefe-rh', window.CONFIG_SISTEMA?.jefe_rh || 'Jefatura RH');
     escribirTexto('p-pdf-delegada', window.CONFIG_SISTEMA?.delegada_admin || 'Delegación Admin');
-
+console.log("DATOS QUE LLEGAN AL PDF:", datos);
     const elemento = document.getElementById('molde-permiso-inasistencia');
     const canvas = await html2canvas(elemento, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     

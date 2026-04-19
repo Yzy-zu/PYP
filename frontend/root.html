@@ -4,6 +4,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>admin</title>
+         <link rel="icon" type="image/x-icon" href="imagenes/ok/favicon.ico" />
         <link
             href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
             rel="stylesheet">
@@ -410,13 +411,13 @@
         async function updateRolUsuario(id) {
             const rol = document.getElementById(`u_rol_${id}`).value;
             const res = await fReq(`/usuarios/rol/${id}`, 'PATCH', { rol });
-            if(res.ok) alert('COMMIT SUCCESSFUL');
+            if(res.ok) alert('actualizacion hecha');
         }
 
         async function resetPass(id) {
             if(confirm('WARN: FORCE PWD TO "123456"?')) {
                 const res = await fReq(`/usuarios/resetpass/${id}`, 'PATCH');
-                if(res.ok) alert('PWD RESET SUCCESSFUL');
+                if(res.ok) alert('actualizacion completa');
             }
         }
 
@@ -436,7 +437,7 @@
                 motivo: document.getElementById(`mp_${id}`).value
             };
             const res = await fReq(`/pases/override/${id}`, 'PATCH', payload);
-            if(res.ok) alert('COMMIT SUCCESSFUL');
+            if(res.ok) alert('aactualizacion completa');
         }
 
         async function deletePase(id) {

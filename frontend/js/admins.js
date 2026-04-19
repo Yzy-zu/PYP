@@ -1,4 +1,4 @@
-const CONFIG_SISTEMA = {
+window.CONFIG_SISTEMA = {
     rector: "ING VLADIMIR PUTIN",
     jefe_rh: "Pepe el loco",
     delegada_admin: "Claudia CHeibaum",

@@ -2,20 +2,24 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-image: url('../../imagenes/Login.jpg'); 
+    background-image: url('../../imagenes/Logodefinitivo.png'); 
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
     background-attachment: fixed;
     display: flex;
-    justify-content: center;
+    
+    justify-content: flex-end; 
     align-items: center;
     min-height: 100vh;
+    
+    padding-right: 300px; 
 }
 
 .main-wrapper {
     width: 100%;
-    max-width: 400px;
+    /* Esto garantiza que el cuadro no se haga pequeño ni gigante */
+    max-width: 400px; 
     padding: 20px;
 }
 
@@ -24,13 +28,15 @@ body {
     padding: 40px;
     border-radius: 15px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-    border-top: 6px solid var(--utm-teal); 
+    
+    border-top: 6px solid #008080; 
     backdrop-filter: blur(10px); 
     -webkit-backdrop-filter: blur(10px);
 }
 
+
 .form-title {
-    color: var(--utm-teal);
+    color: #008080;
     text-align: center;
     margin-bottom: 30px;
     font-weight: bold;
@@ -52,20 +58,11 @@ body {
     border-radius: 8px;
     outline: none;
 }
-.input-box input:focus { border-color: var(--utm-teal); }
-
-.error {
-    color: #d9534f;
-    font-size: 0.75rem;
-    display: block;
-    margin-top: 5px;
-    height: 15px;
-}
 
 .submit-btn {
     width: 100%;
     padding: 14px;
-    background-color: var(--utm-teal);
+    background-color: #008080;
     color: white;
     border: none;
     border-radius: 8px;
@@ -74,14 +71,40 @@ body {
     cursor: pointer;
     transition: background 0.3s;
 }
-.submit-btn:hover { background-color: var(--utm-dark); }
+
 .logo-container {
     text-align: center;
-    margin-bottom: 20px; /* Espacio entre el logo y el título Login */
+    margin-bottom: 20px;
 }
 
 .school-logo {
-    max-width: 150px; /* Ajusta el ancho según necesites */
+    max-width: 150px;
     height: auto;
     display: inline-block;
+}
+
+/* Adaptación para dispositivos móviles */
+@media screen and (max-width: 768px) {
+    body {
+        justify-content: center; /* Centrar el cuadro de login horizontalmente */
+        padding-right: 0; /* Quitar el padding derecho que empujaba el cuadro */
+        padding: 20px; /* Agregar un padding general para que no toque los bordes */
+    }
+
+    .main-wrapper {
+        padding: 0;
+        display: flex;
+        justify-content: center;
+    }
+
+    #loginsection {
+        padding: 30px 20px; /* Reducir un poco el padding interno para pantallas pequeñas */
+        width: 100%;
+        max-width: 350px; /* Asegurar que no sea más ancho que la pantalla */
+    }
+    
+    .form-title {
+        font-size: 1.5rem; /* Título un poco más pequeño en móvil */
+        margin-bottom: 20px;
+    }
 }
