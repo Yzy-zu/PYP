@@ -410,13 +410,13 @@
         async function updateRolUsuario(id) {
             const rol = document.getElementById(`u_rol_${id}`).value;
             const res = await fReq(`/usuarios/rol/${id}`, 'PATCH', { rol });
-            if(res.ok) alert('COMMIT SUCCESSFUL');
+            if(res.ok) alert('actualizacion hecha');
         }
 
         async function resetPass(id) {
             if(confirm('WARN: FORCE PWD TO "123456"?')) {
                 const res = await fReq(`/usuarios/resetpass/${id}`, 'PATCH');
-                if(res.ok) alert('PWD RESET SUCCESSFUL');
+                if(res.ok) alert('actualizacion completa');
             }
         }
 
@@ -436,7 +436,7 @@
                 motivo: document.getElementById(`mp_${id}`).value
             };
             const res = await fReq(`/pases/override/${id}`, 'PATCH', payload);
-            if(res.ok) alert('COMMIT SUCCESSFUL');
+            if(res.ok) alert('aactualizacion completa');
         }
 
         async function deletePase(id) {

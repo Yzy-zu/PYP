@@ -475,6 +475,11 @@ function pintarHistorial(registros) {
                     (reg.estado === 'Pendiente' ? 'bg-warning text-dark' : 'bg-danger'))
             }" style="font-size: 0.65rem;">${reg.estado}
                     </span>
+                    <span class="badge ${reg.tipoTramite === 'Permiso' ? 'bg-success' :
+                (reg.tipoTramite === 'Pase' ? 'bg-info text-white' : 'bg-secondary')
+            }"
+                 style="font-size: 0.65rem;">${reg.tipoTramite}
+                    </span>
                     ${reg.estado === 'Pendiente' ? `
                         <div class="btn-group" onclick="event.stopPropagation()">
                             <button class="btn btn-sm btn-outline-primary p-1" onclick="prepararEdicion('${reg.tipoTramite}', ${reg.id})"><i class="fa-solid fa-pen" style="font-size: 0.7rem;"></i></button>

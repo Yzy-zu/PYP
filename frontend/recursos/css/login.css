@@ -82,3 +82,29 @@ body {
     height: auto;
     display: inline-block;
 }
+
+/* Adaptación para dispositivos móviles */
+@media screen and (max-width: 768px) {
+    body {
+        justify-content: center; /* Centrar el cuadro de login horizontalmente */
+        padding-right: 0; /* Quitar el padding derecho que empujaba el cuadro */
+        padding: 20px; /* Agregar un padding general para que no toque los bordes */
+    }
+
+    .main-wrapper {
+        padding: 0;
+        display: flex;
+        justify-content: center;
+    }
+
+    #loginsection {
+        padding: 30px 20px; /* Reducir un poco el padding interno para pantallas pequeñas */
+        width: 100%;
+        max-width: 350px; /* Asegurar que no sea más ancho que la pantalla */
+    }
+    
+    .form-title {
+        font-size: 1.5rem; /* Título un poco más pequeño en móvil */
+        margin-bottom: 20px;
+    }
+}
