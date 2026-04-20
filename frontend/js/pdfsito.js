@@ -37,7 +37,7 @@ async function pdfPase(datosPase, usuario) {
     escribirTexto('pdf-motivo-texto', datosPase.motivo || 'COMISIÓN / PERSONAL');
     //firma
     escribirTexto('val-firma-vo-bo', datosPase.revisado_por_nombre || "AUTORIZADO DIGITAL");
-console.log("DATOS QUE LLEGAN AL PDF:", datos);
+console.log("DATOS QUE LLEGAN AL PDF:", datosPase);
     const elemento = document.getElementById('molde-pase-salida');
     const canvas = await html2canvas(elemento, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
     

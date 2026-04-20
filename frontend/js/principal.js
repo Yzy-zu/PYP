@@ -794,7 +794,7 @@ function abrirPerfil(conSeguridad) {
 //cambiamos el icono y el titulo de la ventana arriba
     const titulo = document.querySelector('#modalPerfil .modal-title');
     titulo.innerHTML = conSeguridad
-        ? '<i class="fa-solid fa-key me-2 text-warning"></i> Actualizar Seguridad'
+        ? '<i class="fa-solid fa-key me-2 text-warning"></i> Cambiar Contraseña'
         : '<i class="fa-solid fa-user-gear me-2"></i> Expediente Docente';
 //mostramos la ventana flotante
     modalPerfilInstancia.show();
