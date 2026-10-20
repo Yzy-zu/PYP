@@ -4,6 +4,7 @@ const { enviarNotificacionEstado } = require('../correos/correo');
 const negocio = require('../negocio/tramites');
 const { responderError } = require('../negocio/reglas');
 const { notificar } = require('../seguridad/acceso');
+const { folio } = require('../documentos/historial');
 
 ////creamos el objeto con las funciones 
 const permisosControlador = {
@@ -16,7 +17,7 @@ const permisosControlador = {
             if (!permisos) {
                 return res.status(404).json({ ok: false, msg: "ALgo salio mal :v" });
             }
-            res.json({ ok: true, data: permisos });
+            res.json({ ok: true, data: permisos.map(p => ({ ...p, folio: folio('permiso', p.id) })) });
         } catch (error) {
             res.status(500).json({ ok: false, msg: "Error de server" });
         }
@@ -27,7 +28,7 @@ const permisosControlador = {
         try {
             const permisos = await usersql.obtenerTodos();
             const data = req.usuario.rol === 'Administrador' ? permisos.map(({ rfc, fecha_nacimiento, fecha_ingreso, categoria, tipo_contrato, ...solicitud }) => solicitud) : permisos;
-            res.json({ ok: true, data });
+            res.json({ ok: true, data: data.map(p => ({ ...p, folio: folio('permiso', p.id) })) });
         } catch (error) {
             res.status(500).json({ ok: false, msg: "Error de server" });
         }

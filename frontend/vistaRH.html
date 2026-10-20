@@ -16,6 +16,16 @@
             href="imagenes/azules/favicon-32x32.png">
         <link rel="stylesheet" href="recursos/css/estilos.css">
         <link rel="stylesheet" href="recursos/css/rh.css">
+        <style>
+            .content-area { padding-bottom: 120px !important; }
+            #solicitudes-rh, #resultado-lote-rh { flex-shrink: 0; }
+            @media (max-width: 768px) {
+                .content-area { display: block !important; overflow-y: auto !important; }
+                #historial-rh { height: auto !important; min-height: 350px; overflow: visible !important; }
+                #historial-rh .table-responsive { max-height: 65vh; }
+                #solicitudes-rh .card-body { padding: 16px !important; }
+            }
+        </style>
     </head>
     <body>
 
@@ -199,7 +209,25 @@
             </div>
 
             <div class="content-area">
-                <div class="historial-panel">
+                <section id="solicitudes-rh" class="bg-white rounded shadow-sm p-3 mb-4" aria-labelledby="titulo-solicitudes-rh">
+                    <h5 id="titulo-solicitudes-rh" class="fw-bold">Solicitudes con visto bueno</h5>
+                    <p class="small text-muted">Selecciona los trámites visibles que quieras aprobar. Solo se incluyen solicitudes con Vo.Bo. del jefe inmediato.</p>
+                    <div class="d-flex gap-2 flex-wrap align-items-center mb-3">
+                        <button type="button" id="btn-seleccionar-rh" class="btn btn-outline-primary btn-sm">Seleccionar visibles</button>
+                        <button type="button" id="btn-aprobar-rh" class="btn btn-success btn-sm" disabled>Aprobar selección</button>
+                        <button type="button" id="btn-actualizar-rh" class="btn btn-outline-secondary btn-sm">Actualizar datos y limpiar selección</button>
+                        <span id="seleccion-resumen-rh" class="small" aria-live="polite">0 seleccionados</span>
+                    </div>
+                    <p id="actualizacion-pendiente-rh" class="alert alert-info py-2 small" hidden>Hay cambios o estados pendientes de consultar. La selección se conserva; actualiza los datos antes de elegir otro lote.</p>
+                    <p id="progreso-lote-rh" class="fw-bold small" role="status" aria-live="polite"></p>
+                    <div id="pendientes-grid" class="row g-3"></div>
+                </section>
+                <section id="resultado-lote-rh" class="bg-white rounded shadow-sm p-3 mb-4" hidden aria-labelledby="titulo-resultado-rh">
+                    <h5 id="titulo-resultado-rh">Resultado por folio</h5>
+                    <p id="resultado-resumen-rh" role="status" aria-live="polite"></p>
+                    <ul id="resultado-folios-rh" class="list-group small"></ul>
+                </section>
+                <div id="historial-rh" class="historial-panel">
                     <div
                         class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-3">
                         <div>
@@ -214,11 +242,11 @@
                             <div
                                 class="btn-group border rounded shadow-sm bg-white">
                                 <button class="btn btn-light px-3"
-                                    onclick="ordenarRapido('reciente')"
+                                    data-orden-rh onclick="ordenarRapido('reciente')"
                                     title="Más recientes"><i
                                         class="fa-solid fa-clock-rotate-left text-primary"></i></button>
                                 <button class="btn btn-light px-3"
-                                    onclick="ordenarRapido('nombre')"
+                                    data-orden-rh onclick="ordenarRapido('nombre')"
                                     title="Orden Alfabético"><i
                                         class="fa-solid fa-font text-primary"></i></button>
                             </div>
@@ -230,7 +258,7 @@
                             style="font-size: 0.9rem;">
                             <thead class="table-light">
                                 <tr>
-                                    <th class="ps-3">ID</th>
+                                    <th class="ps-3">Folio</th>
                                     <th>Tipo</th>
                                     <th>Docente</th>
                                     <th>Fecha Evento</th>
@@ -263,7 +291,7 @@
             <div id="contenedor-flotante"
                 class="position-fixed m-4 d-flex gap-3 btn-grupo-flotante"
                 style="z-index: 1050; bottom: 20px; right: 20px;">
-                <a href="vistaRHS.html"
+                <a href="#solicitudes-rh"
                     class="btn shadow-lg rounded-pill px-4 py-3 fw-bold d-flex align-items-center"
                     style="background-color: var(--utm-red); color: white; border: none;">
                     <i class="fa-solid fa-bell fa-shake me-2"></i> Por Autorizar
@@ -303,6 +331,7 @@
                                 data-bs-dismiss="modal"></button>
                         </div>
                         <div class="modal-body p-4">
+                            <p id="det-rh-folio" class="fw-bold text-primary"></p>
                             <label
                                 class="text-muted small fw-bold">Docente</label>
                             <p id="det-rh-nombre"
@@ -423,17 +452,18 @@
             <script
                 src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
             <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+            <script src="js/tramites.js"></script>
             <script src="js/seguridad.js"></script>
 <script>Seguridad.cargar('js/vista_rh.js', 'RRHH');</script>
             <script src="js/pdfsito.js"></script>
 
             <!-- Bottom Tab Nav-->
             <nav class="bottom-tab-nav d-md-none">
-                <a href="vistaRH.html" class="tab-item active">
+                <a href="#historial-rh" class="tab-item active">
                     <i class="fa-solid fa-table-list"></i>
                     <span>Historial</span>
                 </a>
-                <a href="vistaRHS.html" class="tab-item position-relative">
+                <a href="#solicitudes-rh" class="tab-item position-relative">
                     <i class="fa-solid fa-inbox"></i>
                     <span>Autorizar</span>
                     <span

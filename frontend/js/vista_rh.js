@@ -4,6 +4,19 @@ const URL_BASE = '/api';
 const socket = Seguridad.socket();
 //lista para guardar todos los registros
 let registrosGlobales = [];
+let registrosVisiblesRH = [];
+const seleccionRH = new Set();
+let enviandoRH = false;
+let recargaPendienteRH = false;
+let requiereRecargaRH = false;
+let cargaActualRH = 0;
+let ordenRH = 'reciente';
+const claveRH = reg => `${reg.tipoTramite}:${reg.id}`;
+
+function avisarActualizacionRH() {
+    recargaPendienteRH = true;
+    actualizarSeleccionRH();
+}
 //variable para el objeto del calendario de rh
 let calendarioRH;
 //variable para la ventana de detalles de rh
@@ -79,10 +92,26 @@ Seguridad.alCargar(() => {
     if (btnFiltros) btnFiltros.addEventListener('click', aplicarFiltros);
 
 //traemos toda la info de la base de datos
-    cargarDatosGenerales();
+    document.getElementById('btn-seleccionar-rh')?.addEventListener('click', seleccionarTodoMasivo);
+    document.getElementById('btn-aprobar-rh')?.addEventListener('click', aprobarSeleccionMasiva);
+    document.getElementById('btn-actualizar-rh')?.addEventListener('click', () => {
+        if (enviandoRH) return;
+        seleccionRH.clear();
+        cargarDatosGenerales({ forzar: true });
+    });
+    const vista = new URLSearchParams(window.location.search).get('view');
+    cargarDatosGenerales().then(() => {
+        if (vista === 'autorizar') document.getElementById('solicitudes-rh')?.scrollIntoView();
+        if (vista === 'historial') document.getElementById('historial-rh')?.scrollIntoView();
+    });
 });
 //obtener datos desde backend
-async function cargarDatosGenerales() {
+async function cargarDatosGenerales({ forzar = false } = {}) {
+    if (!forzar && (enviandoRH || seleccionRH.size)) {
+        avisarActualizacionRH();
+        return false;
+    }
+    const carga = ++cargaActualRH;
     try {
 //pedimos pases permisos y feriados al mismo tiempo
         const [resPases, resPermisos, resFest] = await Promise.all([
@@ -96,8 +125,14 @@ async function cargarDatosGenerales() {
 
         const dataP = await resPases.json();
         const dataM = await resPermisos.json();
+        if (!resPases.ok || !resPermisos.ok || !dataP.ok || !dataM.ok) throw new Error('No se pudieron consultar todos los trámites.');
+        if (carga !== cargaActualRH) return false;
+        if (!forzar && (enviandoRH || seleccionRH.size)) { avisarActualizacionRH(); return false; }
 //guardamos los feriados en una variable global
-        window.festivosGlobalesRH = resFest.ok ? await resFest.json() : [];
+        const festivos = resFest.ok ? await resFest.json() : [];
+        if (carga !== cargaActualRH) return false;
+        if (!forzar && (enviandoRH || seleccionRH.size)) { avisarActualizacionRH(); return false; }
+        window.festivosGlobalesRH = festivos;
 
 //etiquetamos cada registro para saber que tipo es
         const mPases = (dataP.data || []).map(p => ({ ...p, tipoTramite: 'Pase', fechaClave: p.fecha_uso }));
@@ -106,32 +141,29 @@ async function cargarDatosGenerales() {
 //juntamos todo y lo ordenamos por la fecha
         let todos = [...mPases, ...mPermisos].sort((a, b) => new Date(a.fechaClave) - new Date(b.fechaClave));
 
-//contamos cuantos tramites lleva cada profesor
-        const contadores = {};
-        todos.forEach(reg => {
-            const uid = reg.id_usuario;
-
-            if (!contadores[uid]) {
-                contadores[uid] = { Pase: 0, Permiso: 0 };
-            }
-
-            //incrementamos el contador de tramites de la persona
-            contadores[uid][reg.tipoTramite]++;
-            reg.folio_personal = contadores[uid][reg.tipoTramite];
-        });
 //ordenamos para que los mas nuevos salgan primero
         registrosGlobales = todos.sort((a, b) => new Date(b.fechaClave) - new Date(a.fechaClave));
 
 //mandamos los datos a dibujar en la pantalla
-        pintarDashboardRH(registrosGlobales);
+        recargaPendienteRH = false;
+        requiereRecargaRH = false;
+        if (!enviandoRH) procesarFiltrosRH();
+        return true;
 
     } catch (e) {
         console.error("Error al cargar datos de rh", e);
-        mostrarToast("Error de conexión con el servidor", "error");
+        mostrarToast("No se pudieron actualizar los estados. Conservamos la última consulta.", "error");
+        recargaPendienteRH = true;
+        requiereRecargaRH = true;
+        actualizarSeleccionRH();
+        return false;
     }
 }
 //funcion para pintar los datos
 function pintarDashboardRH(datos) {
+    registrosVisiblesRH = datos;
+    const elegibles = new Set(datos.filter(reg => reg.estado === 'Vo.Bo.').map(claveRH));
+    for (const clave of seleccionRH) if (!elegibles.has(clave)) seleccionRH.delete(clave);
 //buscamos los contenedores de la cuadricula y la tabla
     const contenedorGrid = document.getElementById('pendientes-grid');
     const tablaHistorial = document.getElementById('tabla-general');
@@ -143,7 +175,7 @@ function pintarDashboardRH(datos) {
 
 //ponemos el numero de pendientes en los circulos de aviso
     if (badgeNav) badgeNav.textContent = pendientes.length;
-    const badgeMovil = document.getElementById('badge-nav-solicitudes-movil');
+    const badgeMovil = document.getElementById('badge-nav-solicitudes-nav');
     if (badgeMovil) badgeMovil.textContent = pendientes.length;
     if (contenedorGrid) {
 //si no hay nada que autorizar ponemos un icono de café
@@ -163,18 +195,19 @@ function pintarDashboardRH(datos) {
 
 //revisamos si ya hay gente de la misma area fuera este dia
                 if (area && area !== 'No Registrada') {
-                    const choques = historial.filter(h =>
-                        h.id !== reg.id &&
-                        h.fechaClave === reg.fechaClave &&
+                    const choques = new Set(registrosGlobales.filter(h =>
+                        claveRH(h) !== claveRH(reg) &&
+                        (h.usuario_id ?? h.id_usuario) !== (reg.usuario_id ?? reg.id_usuario) &&
+                        Tramites.coinciden(h, reg) &&
                         h.area_adscripcion === area &&
-                        (h.estado === 'Aprobado' || h.estado === 'Vo.Bo.')
-                    );
+                        ['Pendiente', 'Vo.Bo.', 'Aprobado'].includes(h.estado)
+                    ).map(h => h.usuario_id ?? h.id_usuario ?? claveRH(h)));
 
 //si hay mucha gente fuera mostramos un aviso rojo de alerta
-                    if (choques.length > 0) {
+                    if (choques.size > 0) {
                         alertaChoque = `
                         <div class="alert alert-danger p-2 mt-3 mb-0 small text-center fw-bold border-danger border-opacity-25 shadow-sm">
-                            <i class="fa-solid fa-triangle-exclamation fa-beat me-1"></i> ¡Alerta! ${choques.length} docente(s) de ${Seguridad.escapeHTML(area)} ya se ausentará(n) hoy.
+                            <i class="fa-solid fa-triangle-exclamation fa-beat me-1"></i> ¡Alerta! ${choques.size} docente(s) de ${Seguridad.escapeHTML(area)} tienen trámites que coinciden con estas fechas.
                         </div>`;
                     }
                 }
@@ -187,6 +220,10 @@ function pintarDashboardRH(datos) {
                          style="cursor: pointer;">
 
                         <div class="card-body p-4">
+                            <label class="form-check mb-3 d-flex align-items-center gap-2" data-selector-rh>
+                                <input class="form-check-input check-masivo m-0" type="checkbox" value="${reg.id}" data-tipo="${reg.tipoTramite}" ${seleccionRH.has(claveRH(reg)) ? 'checked' : ''} ${enviandoRH ? 'disabled' : ''}>
+                                <span>Seleccionar ${Seguridad.escapeHTML(Tramites.folio(reg))}</span>
+                            </label>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div class="d-flex align-items-center gap-2">
 
@@ -194,7 +231,7 @@ function pintarDashboardRH(datos) {
                                         ${Seguridad.escapeHTML(reg.tipoTramite)}
                                     </span>
                                 </div>
-                                <small class="text-muted fw-bold">${Seguridad.escapeHTML(reg.tipoTramite)}: ${Seguridad.escapeHTML(reg.folio_personal)}</small>
+                                <small class="text-muted fw-bold">${Seguridad.escapeHTML(Tramites.folio(reg))}</small>
                             </div>
 
                             <h5 class="fw-bold mb-1 text-dark">${Seguridad.escapeHTML(reg.nombre_completo)}</h5>
@@ -230,7 +267,7 @@ function pintarDashboardRH(datos) {
 //agregamos la fila a la tabla con los datos
             return `
             <tr data-detalle="${indice}" style="cursor:pointer">
-                <td class="text-muted fw-bold">N. ${Seguridad.escapeHTML(reg.folio_personal)}</td>
+                <td class="text-muted fw-bold">${Seguridad.escapeHTML(Tramites.folio(reg))}</td>
                 <td><span class="badge bg-secondary text-white border">${Seguridad.escapeHTML(reg.tipoTramite)}</span></td>
                 <td class="fw-bold">${Seguridad.escapeHTML(reg.nombre_completo)}</td>
                 <td>${Seguridad.escapeHTML(reg.fecha_uso_h || reg.fecha_inicio_h)}</td>
@@ -246,6 +283,12 @@ function pintarDashboardRH(datos) {
         contenedor?.querySelectorAll('[data-detalle]').forEach(elemento => {
             const reg = registros[Number(elemento.dataset.detalle)];
             elemento.addEventListener('click', () => verDetallesRRHH(reg));
+            elemento.querySelector('[data-selector-rh]')?.addEventListener('click', event => event.stopPropagation());
+            elemento.querySelector('.check-masivo')?.addEventListener('change', event => {
+                if (event.target.checked) seleccionRH.add(claveRH(reg));
+                else seleccionRH.delete(claveRH(reg));
+                actualizarSeleccionRH();
+            });
             elemento.querySelectorAll('[data-estado]').forEach(boton => {
                 boton.addEventListener('click', event => {
                     event.stopPropagation();
@@ -259,65 +302,48 @@ function pintarDashboardRH(datos) {
     if (calendarioRH) {
         calendarioRH.removeAllEventSources();
         calendarioRH.addEventSource(generarEventos(datos));
+        calendarioRH.addEventSource({ events: (info, success) => success(Tramites.cumpleanos(info, datos)) });
     }
+    actualizarSeleccionRH();
 }
 
 //configuramos el calendario para rh
 function inicializarCalendarioRH() {
     calendarioRH = new FullCalendar.Calendar(document.getElementById('calendario-rh'), {
         initialView: 'dayGridMonth', locale: 'es', height: '100%',
+        displayEventEnd: true, eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
         buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día', list: 'Agenda' },
         allDayText: 'Todo el día',
         headerToolbar: { left: 'prev,next', center: 'title', right: 'today' },
-        events: generarEventos(registrosGlobales),
-        eventClick: (info) => verDetallesRRHH(info.event.extendedProps)
+        eventSources: [
+            generarEventos(registrosVisiblesRH),
+            { events: (info, success) => success(Tramites.cumpleanos(info, registrosVisiblesRH)) }
+        ],
+        eventClick: info => { if (info.event.extendedProps.esTramite === true) verDetallesRRHH(info.event.extendedProps); }
     });
     calendarioRH.render();
 }
 //eventos
 function generarEventos(datos) {
-//dibujamos los dias feriados en el calendario
-    let eventos = (window.festivosGlobalesRH || []).map(f => ({
-        title: ` ${f.descripcion}`,
-        start: f.fecha.split('T')[0],
-        display: 'background',
-        backgroundColor: 'rgba(25, 135, 84, 0.2)'
+    const festivos = (window.festivosGlobalesRH || []).map(f => ({
+        title: String(f.descripcion || 'Día festivo'),
+        start: Tramites.fecha(f.fecha),
+        end: Tramites.sumarDias(Tramites.fecha(f.fecha), 1),
+        allDay: true, display: 'background', backgroundColor: 'rgba(25, 135, 84, 0.2)',
+        extendedProps: { esTramite: false }
     }));
-
-    const cumpleaniosAgregados = new Set();
-
-//ponemos cada tramite en el calendario con su color
-    datos.forEach(reg => {
-        eventos.push({
-            title: `${reg.nombre_completo}: ${reg.tipoTramite}`,
-            start: reg.fechaClave.split('T')[0],
-            backgroundColor: reg.estado === 'Aprobado' ? '#198754' : (reg.estado === 'Pendiente' ? '#ffc107' : '#ffc107'),
-            extendedProps: { ...reg }
-        });
-
-        //agregamos los cumpleaños de los trabajadores
-        if (reg.fecha_nacimiento && !cumpleaniosAgregados.has(reg.id_usuario)) {
-            const año = new Date().getFullYear();
-            const mesDia = reg.fecha_nacimiento.substring(5, 10);
-            eventos.push({
-                title: `Cumple: ${reg.nombre_completo.split(' ')[0]}`,
-                start: `${año}-${mesDia}`,
-                allDay: true,
-                backgroundColor: '#6f42c1',
-                borderColor: 'transparent'
-            });
-            cumpleaniosAgregados.add(reg.id_usuario);
-        }
-    });
-
-    return eventos;
+    return [...festivos, ...datos.map(reg => ({
+        ...Tramites.evento(reg),
+        title: `${reg.nombre_completo}: ${Tramites.folio(reg)}`,
+        backgroundColor: reg.estado === 'Aprobado' ? '#198754' : (reg.estado === 'Vo.Bo.' ? '#0d6efd' : '#b77900'),
+        extendedProps: { ...reg, esTramite: true }
+    }))];
 }
-
-
-
 
 //funcion para ver toda la info de una solicitud en la ventana de rh
 function verDetallesRRHH(data) {
+    if (!data || !['Pase', 'Permiso'].includes(data.tipoTramite)) return;
+    document.getElementById('det-rh-folio').textContent = Tramites.folio(data);
 //revisamos si es un pase de salida o un permiso de dias
     const esPase = data.tipoTramite === 'Pase';
 //ponemos el nombre del maestro el motivo y cuando se pidio
@@ -348,7 +374,7 @@ function verDetallesRRHH(data) {
 
 //ponemos el color y el nombre del tipo de tramite en el distintivo
     document.getElementById('det-rh-tipo-badge').className = `badge rounded-pill px-3 py-2 fs-5 ${esPase ? 'bg-secondary text-white' : 'bg-secondary'}`;
-    document.getElementById('det-rh-tipo-badge').textContent = data.tipo_conteo;
+    document.getElementById('det-rh-tipo-badge').textContent = data.tipoTramite;
 
 //cambiamos el color del estado segun si es aprobado pendiente o rechazado
     const est = document.getElementById('det-rh-estado-badge');
@@ -361,6 +387,7 @@ function verDetallesRRHH(data) {
 //hace que el buscador espere un poquito para no trabarse al escribir
 let debounceTimerRH = null;
 function aplicarFiltros() {
+    if (enviandoRH) return;
     clearTimeout(debounceTimerRH);
     debounceTimerRH = setTimeout(() => {
         procesarFiltrosRH();
@@ -368,6 +395,7 @@ function aplicarFiltros() {
 }
 //funcion para filtrar la lista de rh por nombre area estado o fecha
 function procesarFiltrosRH() {
+    if (enviandoRH) return;
 //sacamos todos los valores que el usuario puso en los cuadros de busqueda
     const elDoc = document.getElementById('filtro-docente');
     const fDoc = elDoc ? elDoc.value.toLowerCase() : '';
@@ -393,7 +421,7 @@ function procesarFiltrosRH() {
 //filtramos la lista grande de registros uno por uno
     const res = registrosGlobales.filter(r => {
         const fClave = r.fechaClave.split('T')[0];
-        const f = new Date(r.fechaClave);
+
         const areaDoc = (r.area_adscripcion || '').toLowerCase();
 
 //si lo que escribio no coincide con el nombre lo sacamos
@@ -409,12 +437,15 @@ function procesarFiltrosRH() {
         if (fFechaFin && fClave > fFechaFin) return false;
 
 //revisamos si coincide con el mes y el año que marcaron
-        if (fMes && (f.getMonth() + 1).toString().padStart(2, '0') !== fMes) return false;
-        if (fAño && f.getFullYear().toString() !== fAño) return false;
+        if (fMes && fClave.slice(5, 7) !== fMes) return false;
+        if (fAño && fClave.slice(0, 4) !== fAño) return false;
 
         return true;
     });
 //dibujamos los resultados que si pasaron los filtros
+    res.sort(ordenRH === 'nombre'
+        ? (a, b) => a.nombre_completo.localeCompare(b.nombre_completo)
+        : (a, b) => String(b.fechaClave).localeCompare(String(a.fechaClave)) || b.id - a.id);
     pintarDashboardRH(res);
 }
 
@@ -444,42 +475,26 @@ if (formPassRH) {
 }
 //sirve para acomodar la lista por los mas nuevos o por orden alfabetico
 function ordenarRapido(criterio) {
-    if (!registrosGlobales.length) return;
-    let copia = [...registrosGlobales];
-    switch (criterio) {
-        case 'reciente': copia.sort((a, b) => b.id - a.id); break;
-        case 'nombre': copia.sort((a, b) => a.nombre_completo.localeCompare(b.nombre_completo)); break;
-    }
-    pintarDashboardRH(copia);
+    if (enviandoRH) return;
+    ordenRH = criterio;
+    procesarFiltrosRH();
 }
 
-//esta funcion le avisa al servidor si rh acepto o rechazo el tramite
 async function procesarRH(id, nuevoEstado, tipo) {
-    try {
-        const endpoint = tipo === 'Pase' ? 'pases' : 'permisos';
-        const resp = await fetch(`${URL_BASE}/${endpoint}/cancelar`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'x-token': token },
-            body: JSON.stringify({ id: id, cancelar: nuevoEstado, revisado_por: usuario.id })
-        });
-        const res = await resp.json();
-        if (res.ok) {
-//si se guardo bien refrescamos toda la informacion de la pantalla
-            mostrarToast("Trámite finalizado correctamente");
-            cargarDatosGenerales();
-        } else {
-            mostrarToast(res.msg, "error");
-        }
-    } catch (e) {
-        mostrarToast("Error de conexión", "error");
-    }
+    if (enviandoRH) return;
+    if (requiereRecargaRH) return mostrarToast('Actualiza los estados antes de enviar otro cambio.', 'info');
+    const reg = registrosGlobales.find(r => r.id === Number(id) && r.tipoTramite === tipo);
+    if (!reg || reg.estado !== 'Vo.Bo.') return mostrarToast('Actualiza la lista: el trámite ya no tiene Vo.Bo.', 'info');
+    await enviarCambiosRH([{ ...reg }], nuevoEstado);
 }
 
 //truco para que tengan que picarle dos veces al boton antes de autorizar
 function confirmarAccionRH(btn, id, estado, tipo) {
+    if (enviandoRH) return;
 //si ya le pico una vez y vuelve a picar entonces mandamos la respuesta
     if (btn.dataset.confirmando === "true") {
         clearInterval(Number(btn.dataset.intervalo));
+        btn.dataset.confirmando = 'false';
         procesarRH(id, estado, tipo);
         return;
     }
@@ -520,9 +535,9 @@ function celdaCSV(valor) {
 function exportarExcel() {
     if (!registrosGlobales.length) return mostrarToast("No hay datos para exportar", "info");
     const filas = [
-        ['ID Tramite', 'Tipo', 'Docente', 'Area Adscripcion', 'Fecha Evento', 'Estado', 'Revisado Por', 'Motivo'],
+        ['Folio', 'Tipo', 'Docente', 'Area Adscripcion', 'Fecha Evento', 'Estado', 'Revisado Por', 'Motivo'],
         ...registrosGlobales.map(reg => [
-            reg.id, reg.tipoTramite, reg.nombre_completo, reg.area_adscripcion || 'No Registrada',
+            Tramites.folio(reg), reg.tipoTramite, reg.nombre_completo, reg.area_adscripcion || 'No Registrada',
             reg.fecha_uso_h || reg.fecha_inicio_h, reg.estado, reg.revisado_por_nombre || 'N/A',
             reg.motivo || 'Sin motivo'
         ])
@@ -540,47 +555,121 @@ function exportarExcel() {
     mostrarToast("Reporte descargado exitosamente");
 }
 
-//sirve para marcar o desmarcar todos los cuadritos de seleccion de la tabla
-function seleccionarTodoMasivo() {
-    const checks = document.querySelectorAll('.check-masivo');
-    const todosMarcados = Array.from(checks).every(c => c.checked);
-    checks.forEach(c => c.checked = !todosMarcados);
-}
-
-//esta funcion manda a aprobar varios tramites de un solo golpe
-async function aprobarSeleccionMasiva() {
-//buscamos cuales cuadritos estan marcados ahorita
-    const checks = document.querySelectorAll('.check-masivo:checked');
-    if (checks.length === 0) return mostrarToast("Selecciona al menos un trámite de la lista", "info");
-
-//preguntamos si de verdad quiere aprobar tantos para evitar errores
-    if (!confirm(`¿Estás seguro de aprobar ${checks.length} trámites al mismo tiempo?`)) return;
-
-    mostrarToast(`Procesando ${checks.length} firmas...`, "info");
-
-    let exitosos = 0;
-//usamos un ciclo para ir enviando la aprobacion de cada uno al servidor
-    for (const check of checks) {
-        const id = check.value;
-        const tipo = check.dataset.tipo;
-        const endpoint = tipo === 'Pase' ? 'pases' : 'permisos';
-
-        try {
-//llamamos a la api para poner el estado en aprobado
-            const resp = await fetch(`${URL_BASE}/${endpoint}/cancelar`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', 'x-token': token },
-                body: JSON.stringify({ id: id, cancelar: 'Aprobado', revisado_por: usuario.id })
-            });
-            const res = await resp.json();
-            if (res.ok) exitosos++;
-        } catch (e) {
-            console.error("Error al procesar ID: ", id);
-        }
+// La selección se identifica por tipo e ID, nunca por posición de la lista.
+function actualizarSeleccionRH() {
+    const elegibles = registrosVisiblesRH.filter(reg => reg.estado === 'Vo.Bo.');
+    const cantidad = elegibles.filter(reg => seleccionRH.has(claveRH(reg))).length;
+    const contador = document.getElementById('seleccion-resumen-rh');
+    if (contador) contador.textContent = `${cantidad} seleccionados de ${elegibles.length} con Vo.Bo. visibles`;
+    const aprobar = document.getElementById('btn-aprobar-rh');
+    if (aprobar) aprobar.disabled = enviandoRH || requiereRecargaRH || cantidad === 0;
+    const todos = document.getElementById('btn-seleccionar-rh');
+    if (todos) {
+        todos.disabled = enviandoRH || !elegibles.length;
+        todos.textContent = cantidad === elegibles.length && cantidad > 0 ? 'Desmarcar visibles' : 'Seleccionar visibles';
     }
-
-//al final avisamos cuantos se pudieron aprobar correctamente
-    mostrarToast(`Proceso completado! ${exitosos} tramites aprobados`);
+    document.querySelectorAll('[data-estado]').forEach(boton => { boton.disabled = enviandoRH || requiereRecargaRH; });
+    const aviso = document.getElementById('actualizacion-pendiente-rh');
+    if (aviso) aviso.hidden = !recargaPendienteRH;
+}
+function seleccionarTodoMasivo() {
+    if (enviandoRH) return;
+    const elegibles = registrosVisiblesRH.filter(reg => reg.estado === 'Vo.Bo.');
+    const todos = elegibles.length > 0 && elegibles.every(reg => seleccionRH.has(claveRH(reg)));
+    elegibles.forEach(reg => todos ? seleccionRH.delete(claveRH(reg)) : seleccionRH.add(claveRH(reg)));
+    document.querySelectorAll('.check-masivo').forEach(check => {
+        check.checked = seleccionRH.has(`${check.dataset.tipo}:${check.value}`);
+    });
+    actualizarSeleccionRH();
+}
+async function aprobarSeleccionMasiva() {
+    if (enviandoRH) return;
+    if (requiereRecargaRH) return mostrarToast('Actualiza los estados antes de aprobar otro lote.', 'info');
+    // Capturar antes del primer await: cambios de pantalla o sockets no amplían el lote.
+    const lote = registrosVisiblesRH.filter(reg => reg.estado === 'Vo.Bo.' && seleccionRH.has(claveRH(reg))).map(reg => ({ ...reg }));
+    if (!lote.length) return mostrarToast('Selecciona al menos un trámite con Vo.Bo.', 'info');
+    if (!confirm(`¿Aprobar los ${lote.length} trámites seleccionados con Vo.Bo.? Se mostrará el resultado de cada folio.`)) return;
+    await enviarCambiosRH(lote, 'Aprobado');
+}
+function pintarResultadosRH(resultados, recargado, enCurso = false) {
+    const panel = document.getElementById('resultado-lote-rh');
+    if (!panel) return;
+    panel.hidden = false;
+    const confirmados = resultados.filter(r => r.confirmado).length;
+    const resumen = document.getElementById('resultado-resumen-rh');
+    resumen.textContent = enCurso ? `Procesando ${resultados.length} respuestas recibidas…`
+        : `${confirmados} aprobaciones/cambios confirmados de ${resultados.length} trámites procesados. ${recargado ? 'Estados actualizados.' : 'No se pudieron consultar los estados actuales; actualiza antes de reintentar.'}`;
+    document.getElementById('resultado-folios-rh').replaceChildren(...resultados.map(resultado => {
+        const fila = document.createElement('li');
+        fila.className = `list-group-item ${resultado.confirmado ? 'list-group-item-success' : 'list-group-item-warning'}`;
+        fila.textContent = `${resultado.folio}: ${resultado.mensaje}`;
+        return fila;
+    }));
+}
+async function enviarCambiosRH(lote, nuevoEstado) {
+    if (enviandoRH) return;
+    enviandoRH = true;
+    clearTimeout(debounceTimerRH);
+    ++cargaActualRH; // Descartar consultas iniciadas antes de enviar este lote.
+    const controles = [...document.querySelectorAll('#form-filtros input, #form-filtros select, #form-filtros button, #solicitudes-rh button, .check-masivo, [data-estado], [data-orden-rh]')];
+    const previos = controles.map(el => el.disabled);
+    controles.forEach(el => { el.disabled = true; });
+    const resultados = [];
+    const progreso = document.getElementById('progreso-lote-rh');
+    let recargado = false;
+    try {
+        for (const reg of lote) {
+            if (progreso) progreso.textContent = `Procesando ${resultados.length + 1} de ${lote.length}: ${Tramites.folio(reg)}`;
+            let resultado = { folio: Tramites.folio(reg), clave: claveRH(reg), confirmado: false, incierto: false };
+            try {
+                const endpoint = reg.tipoTramite === 'Pase' ? 'pases' : 'permisos';
+                const resp = await fetch(`${URL_BASE}/${endpoint}/cancelar`, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-token': token },
+                    body: JSON.stringify({ id: reg.id, cancelar: nuevoEstado }),
+                    signal: AbortSignal.timeout(15000)
+                });
+                let data;
+                try { data = await resp.json(); } catch { throw new Error('Respuesta no legible'); }
+                if (resp.ok && data.ok) {
+                    resultado.confirmado = true;
+                    resultado.mensaje = `${nuevoEstado}: operación confirmada por el servidor.`;
+                } else {
+                    resultado.mensaje = `No confirmado (HTTP ${resp.status}): ${data.msg || 'el servidor rechazó la operación.'}`;
+                }
+            } catch {
+                resultado.incierto = true;
+                resultado.mensaje = 'Respuesta no recibida; la operación pudo llegar al servidor. Se consultará el estado sin reenviar.';
+            }
+            resultados.push(resultado);
+            pintarResultadosRH(resultados, false, true);
+        }
+        seleccionRH.clear();
+        recargado = await cargarDatosGenerales({ forzar: true });
+        for (const resultado of resultados) {
+            const actual = recargado && registrosGlobales.find(reg => claveRH(reg) === resultado.clave);
+            if (resultado.incierto && !recargado) {
+                resultado.mensaje = 'Respuesta no recibida y no se pudo consultar el estado actual. La operación pudo llegar; actualiza los estados antes de reintentar.';
+            } else if (resultado.incierto && actual) {
+                resultado.confirmado = actual.estado === nuevoEstado;
+                resultado.mensaje = `Respuesta inicial no recibida. Estado consultado: ${actual.estado}. ${actual.estado === nuevoEstado ? 'El estado solicitado está confirmado; no se reenvió.' : 'No se confirmó el cambio solicitado; revisa antes de reintentar.'}`;
+            } else if (recargado && !actual) {
+                resultado.confirmado = false;
+                resultado.mensaje += ' El folio ya no aparece en la consulta actual; revisa su disponibilidad antes de reintentar.';
+            } else if (!resultado.confirmado && actual) {
+                resultado.mensaje += ` Estado consultado: ${actual.estado}.`;
+            } else if (resultado.confirmado && actual && actual.estado !== nuevoEstado) {
+                resultado.confirmado = false;
+                resultado.mensaje = `El servidor aceptó el cambio, pero el estado actual es ${actual.estado}. Revisa el folio.`;
+            }
+        }
+    } finally {
+        enviandoRH = false;
+        controles.forEach((el, index) => { if (el.isConnected) el.disabled = previos[index]; });
+        if (progreso) progreso.textContent = '';
+        procesarFiltrosRH();
+        pintarResultadosRH(resultados, recargado);
+        mostrarToast(recargado && resultados.every(r => r.confirmado) ? 'Todos los cambios fueron confirmados. Consulta el detalle por folio.' : 'Proceso terminado con incidencias. Revisa cada folio antes de reintentar.', recargado && resultados.every(r => r.confirmado) ? 'success' : 'info');
+    }
 }
 
 //sirve para que la barra de filtros aparezca o desaparezca en el celular

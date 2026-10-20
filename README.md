@@ -63,7 +63,7 @@ El dump necesita un cliente compatible con `DELIMITER`; la herramienta utiliza e
 
 ## Alcance actual
 
-Fases 1 a 4: recuperación, arranque, controles básicos de seguridad, reglas de solicitudes, historial de revisión y PDF generado por el servidor. La demo usa datos ficticios y acceso local o por Tailscale. Calendario de intervalos, métricas y otras funciones pendientes corresponden a la fase 5.
+Fases 1 a 5: recuperación, arranque, controles básicos de seguridad, reglas de solicitudes, historial, PDF, calendarios con intervalos, autorización por selección e informe de RH. La demo usa datos ficticios y acceso local o por Tailscale. El ensayo completo y las instrucciones finales de presentación corresponden a la fase 6.
 
 ## Seguridad de fase 2
 
@@ -125,3 +125,19 @@ npm run check:documents
 ```
 
 La suite crea y elimina fixtures propios. Con `pdftotext` instalado también comprueba el contenido del PDF. Ejecutar las suites consecutivamente, con servidor iniciado y correo desactivado. Ver [FASE_4_DOCUMENTOS.md](FASE_4_DOCUMENTOS.md) para resultados y límites.
+
+## Pantallas de fase 5
+
+Los folios de listados, tarjetas, calendarios, detalles y exportaciones coinciden con los del PDF: `PASE-00000001` o `PERM-00000001`. Los listados de API también entregan ese folio. Los pases muestran su horario completo; los permisos muestran todos sus días, incluidos rangos históricos. Los cumpleaños se dibujan según el año visible y el 29 de febrero no se traslada.
+
+RH utiliza una sola página: [vistaRH.html](frontend/vistaRH.html). La dirección anterior `vistaRHS.html` lleva a `vistaRH.html?view=autorizar`. Para autorizar:
+
+1. Filtrar solicitudes y seleccionar las que tengan Vo.Bo.
+2. Pulsar **Aprobar selección** y revisar el resultado de cada folio.
+3. Si hubo pérdida de respuesta, consultar el estado antes de reintentar. La pantalla consulta sin reenviar; si tampoco puede actualizar, bloquea nuevos cambios hasta **Actualizar datos y limpiar selección**.
+
+Cada decisión conserva su propia transacción e historial. El lote puede terminar parcialmente aprobado; no se revierte lo ya confirmado por el servidor.
+
+El [informe de RH](frontend/informeRH.html) comparte filtros de mes de uso/inicio, tipo y estado entre métricas, tablas y CSV. Separa días de permisos aprobados, horas de pases aprobados y solicitudes con Vo.Bo. La tasa es aprobados / (aprobados + rechazados). Las coincidencias por área son alertas de solicitudes con horarios superpuestos, no registros de asistencia ni cálculos de nómina.
+
+El acceso público dirige al login. Las páginas de registro anteriores explican que las cuentas se crean desde administración. Credenciales locales en [.local/ACCESOS_DEMO.md](.local/ACCESOS_DEMO.md); la carpeta `.local` está oculta y excluida de Git. Ver [FASE_5_PANTALLAS.md](FASE_5_PANTALLAS.md) para pruebas y alcance.

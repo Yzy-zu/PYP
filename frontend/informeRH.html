@@ -1,175 +1,81 @@
 <!DOCTYPE html>
 <html lang="es">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>RH</title>
-
-        <link
-            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
-            rel="stylesheet">
-        <script src="https://kit.fontawesome.com/35660cdf83.js"
-            crossorigin="anonymous"></script>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <link rel="icon" type="image/png" sizes="32x32"
-            href="imagenes/azules/favicon-32x32.png">
-        <link rel="stylesheet" href="recursos/css/estilos.css">
-        <link rel="stylesheet" href="recursos/css/rh.css">
-    </head>
-    <body>
-
-        <div class="top-navbar d-flex justify-content-between align-items-center px-3">
-            <div class="d-flex align-items-center">
-                <img src="recursos/imagenes/isologo_UTM_white.svg" height="25" class="me-3" alt="logo">
-                <a href="vistaRH.html" class="btn btn-outline-light d-none d-md-inline ms-2 border-0 fw-bold" style="background-color: rgba(255,255,255,0.1);">
-                    <i class="fa-solid fa-arrow-left me-2"></i>Volver a Historial
-                </a>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Informe de RH · Pases y Permisos UTM</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <link rel="icon" type="image/png" href="imagenes/azules/favicon-32x32.png">
+    <link rel="stylesheet" href="recursos/css/estilos.css">
+    <link rel="stylesheet" href="recursos/css/rh.css">
+    <style>
+        .informe-contenido { padding-bottom: 100px !important; }
+        .informe-filtros { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+        .informe-filtros > div { min-width: 170px; flex: 1; }
+        .informe-tabla td { overflow-wrap: anywhere; }
+        .informe-nav { gap: 8px; }
+        @media (max-width: 768px) {
+            .informe-contenido { display: block !important; }
+            .informe-nav { padding: 0 12px; }
+            .informe-nav .btn { font-size: .75rem; padding: 6px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="top-navbar informe-nav justify-content-between">
+        <a href="vistaRH.html?view=historial" class="btn btn-outline-light">← Historial de RH</a>
+        <span class="fw-bold">Informe de RH</span>
+        <button id="btn-logout" type="button" class="btn btn-outline-light d-none d-md-inline">Cerrar sesión</button>
+    </header>
+    <div class="main-workspace">
+        <main class="content-area informe-contenido">
+            <h1 class="h4">Trámites y ausencias del personal</h1>
+            <p class="text-muted small" id="fecha-reporte"></p>
+            <section class="bento-card mb-4" style="height: auto" aria-label="Filtros del informe">
+                <div class="informe-filtros">
+                    <div><label for="filtro-mes-graficos" class="form-label">Mes de uso/inicio</label><input type="month" class="form-control" id="filtro-mes-graficos"></div>
+                    <div><label for="filtro-tipo-informe" class="form-label">Tipo</label><select class="form-select" id="filtro-tipo-informe"><option value="">Todos</option><option>Pase</option><option>Permiso</option></select></div>
+                    <div><label for="filtro-estado-informe" class="form-label">Estado</label><select class="form-select" id="filtro-estado-informe"><option value="">Todos</option><option>Pendiente</option><option value="Vo.Bo.">Vo.Bo. · Pendiente de RH</option><option>Aprobado</option><option>Rechazado</option><option>Cancelado</option></select></div>
+                    <button class="btn btn-outline-secondary" type="button" id="btn-limpiar-informe">Limpiar filtros</button>
+                    <button class="btn btn-outline-primary" type="button" id="btn-recargar-informe">Actualizar</button>
+                    <button class="btn btn-primary" type="button" id="btn-exportar-informe" disabled>Exportar CSV filtrado</button>
+                </div>
+                <p class="small text-muted mt-3 mb-0">El periodo corresponde a la fecha de uso del pase o de inicio del permiso, no a la fecha de solicitud. Los permisos se atribuyen completos al mes de inicio. Las métricas y el CSV utilizan los mismos filtros.</p>
+            </section>
+            <div id="mensaje-informe" class="alert alert-info" role="status" aria-live="polite">Cargando información…</div>
+            <p class="small fw-bold" id="periodo-informe"></p>
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-lg"><div class="bento-card"><div class="kpi-label">Con inicio hoy</div><div class="kpi-value mt-2" id="stat-hoy">0</div><p class="small text-muted mb-0">Dentro de los filtros</p></div></div>
+                <div class="col-6 col-lg"><div class="bento-card"><div class="kpi-label">Días de permiso aprobados</div><div class="kpi-value mt-2" id="stat-dias">0</div><p class="small text-muted mb-0">Excluye pases por horas</p></div></div>
+                <div class="col-6 col-lg"><div class="bento-card"><div class="kpi-label">Horas de pase aprobadas</div><div class="kpi-value mt-2" id="stat-horas">0</div><p class="small text-muted mb-0">Suma de horarios aprobados</p></div></div>
+                <div class="col-6 col-lg"><div class="bento-card"><div class="kpi-label">Trámites del periodo</div><div class="kpi-value mt-2" id="stat-total">0</div><p class="small text-muted mb-0">Todos los estados seleccionados</p></div></div>
+                <div class="col-6 col-lg"><div class="bento-card"><div class="kpi-label">Tasa de aprobación</div><div class="h4 fw-bold mt-2" id="stat-tasa">Sin decisiones</div><p class="small text-muted mb-0">Aprobados / (aprobados + rechazados)</p></div></div>
+                <div class="col-6 col-lg"><div class="bento-card"><div class="kpi-label">Vo.Bo. pendiente de RH</div><div class="kpi-value mt-2" id="stat-vobo">0</div><p class="small text-muted mb-0">Aún sin aprobación final</p></div></div>
             </div>
-            <div class="small opacity-75 fw-semibold"><i
-                    class="fa-solid fa-chart-line me-2"></i>Estadisticas</div>
-        </div>
-
-        <div class="main-workspace">
-            <aside class="sidebar">
-                <div class="mb-4">
-                    <label class="kpi-label mb-2 d-block">Periodo de
-                        Análisis</label>
-                    <input type="month" class="form-control rounded-3 border-2"
-                        id="filtro-mes-graficos" onchange="recargarDashboard()">
-                    <button
-                        class="btn btn-link btn-sm text-decoration-none p-0 mt-2"
-                        onclick="document.getElementById('filtro-mes-graficos').value=''; recargarDashboard();">Ver
-                        histórico total</button>
-                </div>
-            </aside>
-
-            <main class="content-area">
-                <div class="row g-3 mb-4">
-                    <div class="col-md-3">
-                        <div class="bento-card"
-                            style="border-top: 4px solid var(--utm-teal);">
-                            <div class="kpi-label">Tramites de hoy</div>
-                            <div class="kpi-value mt-2" id="stat-hoy">0</div>
-                            <div class="small text-muted mt-2"><i
-                                    class="fa-solid fa-bolt text-warning"></i>
-                                Solicitudes del día</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="bento-card"
-                            style="border-top: 4px solid var(--utm-dark-teal);">
-                            <div class="kpi-label">Dias de Inasistencias (Permisos)</div>
-                            <div class="kpi-value mt-2" id="stat-dias">0</div>
-                            <div class="small text-muted mt-2"><i
-                                    class="fa-solid fa-calendar-check"></i>
-                                Acumulados</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="bento-card"
-                            style="border-top: 4px solid #ed8936;">
-                            <div class="kpi-label">Volumen al mes</div>
-                            <div class="kpi-value mt-2" id="stat-total">0</div>
-                            <div class="small text-muted mt-2"><i
-                                    class="fa-solid fa-file-invoice"></i>
-                                Registros en periodo</div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="bento-card"
-                            style="border-top: 4px solid #48bb78;">
-                            <div class="kpi-label">Tasa Aprobación</div>
-                            <div class="kpi-value mt-2" id="stat-tasa">0%</div>
-                            <div class="small text-muted mt-2"><i
-                                    class="fa-solid fa-check-double text-success"></i>
-                                Aprobados</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="row g-4 mb-4">
-                    <div class="col-md-8">
-                        <div class="bento-card">
-                            <h6 class="fw-bold text-muted mb-4"><i
-                                    class="fa-solid fa-chart-line me-2"></i>Historial
-                                Operativo (Últimos movimientos)</h6>
-                            <div class="chart-container">
-                                <canvas id="chartTendencia"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="bento-card">
-                            <h6 class="fw-bold text-muted mb-4"><i
-                                    class="fa-solid fa-chart-pie me-2"></i>Tipos de Incidencias</h6>
-                            <div class="chart-container">
-                                <canvas id="chartTipos"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="row g-4 mb-4">
-                    <div class="col-md-7">
-                        <div class="bento-card">
-                            <h6 class="fw-bold text-muted mb-4"><i
-                                    class="fa-solid fa-building-user me-2"></i>Numero de tramites por 
-                                    Departamento</h6>
-                            <div class="chart-container" style="height: 300px;">
-                                <canvas id="chartAreas"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-5">
-                        <div class="bento-card">
-                            <h6 class="fw-bold text-muted mb-3"><i
-                                    class="fa-solid fa-medal me-2"></i>
-                                Uso de Prestaciones</h6>
-                            <div class="table-responsive">
-                                <table
-                                    class="table table-hover table-custom m-0">
-                                    <thead>
-                                        <tr>
-                                            <th>Docente</th>
-                                            <th class="text-center">Total</th>
-                                            <th>Frecuencia</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tabla-top-docentes">
-                                        <tr><td colspan="3"
-                                                class="text-center py-4 text-muted small">Cargando
-                                                ranking...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
-
-        <script src="js/seguridad.js"></script>
-<script>Seguridad.cargar('js/informeRH.js', 'RRHH');</script>
-        
-        <!-- Bottom Tab Nav (Solo Móvil) -->
-        <nav class="bottom-tab-nav d-md-none">
-            <a href="vistaRH.html" class="tab-item">
-                <i class="fa-solid fa-table-list"></i>
-                <span>Historial</span>
-            </a>
-            <a href="vistaRHS.html" class="tab-item position-relative">
-                <i class="fa-solid fa-inbox"></i>
-                <span>Autorizar</span>
-                <span class="position-absolute top-0 start-50 translate-middle badge rounded-pill bg-danger" id="badge-nav-solicitudes-nav">0</span>
-            </a>
-            <a href="informeRH.html" class="tab-item active">
-                <i class="fa-solid fa-chart-pie"></i>
-                <span>Métricas</span>
-            </a>
-            <button class="tab-item" onclick="document.getElementById('btn-logout').click()">
-                <i class="fa-solid fa-power-off" style="color: var(--utm-red);"></i>
-                <span style="color: var(--utm-red);">Salir</span>
-            </button>
-        </nav>
-    </body>
+            <p id="aviso-graficas" class="alert alert-warning" hidden>No se pudieron cargar las gráficas. Los totales, las tablas y el CSV siguen disponibles.</p>
+            <div class="row g-4 mb-4">
+                <div class="col-md-8"><section class="bento-card"><h2 class="h6">Trámites por fecha de uso/inicio</h2><div class="chart-container"><canvas id="chartTendencia" role="img" aria-label="Trámites por fecha de uso o inicio"></canvas></div></section></div>
+                <div class="col-md-4"><section class="bento-card"><h2 class="h6">Tipos de trámite</h2><div class="chart-container"><canvas id="chartTipos" role="img" aria-label="Total de pases y permisos"></canvas></div></section></div>
+            </div>
+            <div class="row g-4 mb-4">
+                <div class="col-md-7"><section class="bento-card"><h2 class="h6">Áreas con más trámites (hasta 6)</h2><div class="chart-container"><canvas id="chartAreas" role="img" aria-label="Trámites por área"></canvas></div></section></div>
+                <div class="col-md-5"><section class="bento-card"><h2 class="h6">Personas con más trámites (hasta 5)</h2><p class="small text-muted">Cuenta solicitudes en los estados filtrados, no días de ausencia.</p><div class="table-responsive"><table class="table informe-tabla"><thead><tr><th scope="col">Docente</th><th scope="col">Trámites</th></tr></thead><tbody id="tabla-top-docentes"></tbody></table></div></section></div>
+            </div>
+            <section class="bento-card mb-4" style="height:auto">
+                <h2 class="h6">Coincidencias de ausencia por área <span class="badge bg-secondary" id="badge-colisiones">0</span></h2>
+                <p class="small text-muted">Dos personas distintas con horarios superpuestos: solicitudes pendientes, Vo.Bo. pendientes de RH y aprobaciones finales, identificados por separado. Se revisan días laborables y rangos completos de los registros filtrados; se excluyen rechazados y cancelados. Los registros sin área no permiten esta comparación.</p>
+                <div class="table-responsive"><table class="table informe-tabla"><thead><tr><th scope="col">Fecha</th><th scope="col">Área</th><th scope="col">Personas y estado</th></tr></thead><tbody id="tabla-colisiones"></tbody></table></div>
+            </section>
+        </main>
+    </div>
+    <nav class="bottom-tab-nav d-md-none" aria-label="Navegación de RH">
+        <a href="vistaRH.html?view=historial" class="tab-item"><span>Historial</span></a>
+        <a href="vistaRH.html?view=autorizar" class="tab-item"><span>Autorizar</span></a>
+        <a href="informeRH.html" class="tab-item active" aria-current="page"><span>Métricas</span></a>
+        <button class="tab-item" type="button" id="btn-logout-movil"><span>Salir</span></button>
+    </nav>
+    <script src="js/seguridad.js"></script>
+    <script>Seguridad.cargar('js/informeRH.js', 'RRHH');</script>
+</body>
 </html>

@@ -1,138 +1,22 @@
 <!DOCTYPE html>
-<html lang="en-US">
-    <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>UTM</title>
-         <link rel="icon" type="image/x-icon" href="../imagenes/verdes/favicon.ico" />
-        <style>
-            body{
-                text-align: center;
-            }
-            form {
-                display: inline-block;
-                padding: 1em;
-                border: 1px solid #ccc;
-                border-radius: 1em;
-            }
-
-            p + p {
-                margin-top: 1em;
-            }
-
-            label {
-                display: inline-block;
-                min-width: 90px;
-                text-align: right;
-            }
-
-            input,
-            textarea {
-                font: 1em sans-serif;
-                width: 300px;
-                box-sizing: border-box;
-                border: 1px solid #999;
-            }
-
-            input:focus,
-            textarea:focus {
-                outline-style: solid;
-                outline-color: #000;
-            }
-
-            textarea {
-                vertical-align: top;
-                height: 5em;
-            }
-
-            .button {
-                padding-left: 90px;
-            }
-
-            button {
-                margin-left: 0.5em;
-            }
-
-            @media (max-width: 600px) {
-                form {
-                    width: 95%;
-                    margin: 10px auto;
-                }
-                input, select, textarea {
-                    width: 100%;
-                    font-size: 16px; 
-                }
-                label {
-                    display: block;
-                    text-align: left;
-                    margin-bottom: 5px;
-                }
-                .button {
-                    padding-left: 0;
-                }
-                button {
-                    width: 100%;
-                    margin-left: 0;
-                    padding: 10px;
-                }
-            }
-        </style>
-    </head>
-
-    <body>
-        <form id="formulario" action="/my-handling-form-page" method="post">
-            <div class="logo-container"
-                    style="display: flex; justify-content: space-between; align-items: center; padding: 0 20px;">
-                    <img src="imagenes/utm_logo.svg" alt="Logo Escuela"
-                        width="100">
-                    <img src="imagenes/sys_logo.png" alt="Logo Escuela"
-                        width="80">
-                </div>
-            <p>
-                <label>Bienvenido al registro para probar nuestro sistema, ingresa tus datos basicos para continuar</label>
-            </p>
-            <p>
-                <label for="name">nombre:</label>
-                <input type="text" id="name" name="user_name" />
-            </p>
-            <p>
-                <label for="mail">correo:</label>
-                <input type="email" id="mail" name="user_mail" />
-            </p>
-            <p>
-                <label for="date">fecha nacimiento:</label>
-                <input type="date" name="date" id="date" />
-            </p>
-            <p>
-                <label for="mi-pass">Contraseña:</label>
-                <input type="password" id="pass" name="password">
-            </p>
-            <p>
-                <label for="categoria">carrera:</label>
-                <select id="categoria" name="simple">
-                    <option selected>Tecnologías de la Información</option> 
-                    <option>Tecnologías de la Información</option>
-                    <option>Gastronomía</option>
-                    <option>Enfermería</option>
-                    <option>Energías Renovables</option>
-                    <option>Mantenimiento Industrial</option>
-                    <option>Contabilidad</option>
-                </select>
-            </p>
-            <p class="button">
-                <button type="submit">REGISTRAR</button>
-            </p>
-            
-            <label>*Los datos extras del docente se omitiran por ahora para agilizar el registro (ej, RFC, Fecha ingreso, Categoria, Tipo de contrato)</label>
-            <p>
-                Si deseas un registro completo, da click <a href="registroAv.html">aqui</a>
-            </p>
-        </form>
-        <p class="button">
-    <a href="login.html">
-        <button type="button">saltar proceso</button>
-    </a>
-</p>
-    <script src="js/registro.js"></script>
-    </body>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solicitar acceso · Pases y permisos UTM</title>
+    <link rel="icon" href="imagenes/verdes/favicon.ico">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+    <main class="container py-5">
+        <div class="card shadow-sm mx-auto p-4" style="max-width: 520px;">
+            <img src="imagenes/utm_logo.svg" alt="Universidad Tecnológica de Morelia" width="130" class="mb-4">
+            <h1 class="h4">Solicitar acceso</h1>
+            <p>Las cuentas las crea la administración de la escuela. Solicita tu cuenta y contraseña temporal al responsable del sistema.</p>
+            <p>Si ya tienes tus credenciales, inicia sesión para continuar.</p>
+            <a href="login.html" class="btn btn-success">Iniciar sesión</a>
+            <a href="paginaInformativa/index.html" class="text-center mt-3">Información del proyecto</a>
+        </div>
+    </main>
+</body>
 </html>

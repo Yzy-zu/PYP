@@ -12,7 +12,7 @@ async function getWeather() {
     }
 
     // La URL debe usar comillas invertidas (backticks) ``
-    const url = `${apiUrl}?q=${city}&appid=${apiKey}&units=metric&lang=es`;
+    const url = `${apiUrl}?q=${encodeURIComponent(city)}&appid=${apiKey}&units=metric&lang=es`;
 
     try {
         const response = await fetch(url);
@@ -34,10 +34,18 @@ function displayWeather(data) {
     // Extraemos los datos del JSON
     const { main, name, weather } = data;
 
-    document.getElementById('weatherResult').innerHTML = `
-        <h3>${name}</h3>
-        <p>${weather[0].description}</p>
-        <p>Temperatura: ${main.temp}°C</p>
-        <p>Humedad: ${main.humidity}%</p>
-    `;
+    const contenedor = document.getElementById('weatherResult');
+    contenedor.replaceChildren();
+    for (const [tag, texto] of [['h3', name], ['p', weather[0].description], ['p', `Temperatura: ${main.temp}°C`], ['p', `Humedad: ${main.humidity}%`]]) {
+        const elemento = document.createElement(tag);
+        elemento.textContent = texto;
+        contenedor.appendChild(elemento);
+    }
 }
+
+// El regreso respeta el perfil sin depender del historial de otra pestaña.
+try {
+    const rol = JSON.parse(sessionStorage.getItem('usuario') || '{}').rol;
+    const destinos = { Docente: 'principal.html', Administrador: 'vista_jefe_inmediato.html', RRHH: 'vistaRH.html' };
+    document.getElementById('volver-sistema').href = Object.hasOwn(destinos, rol) ? destinos[rol] : 'login.html';
+} catch (_) { /* Se conserva el enlace al login si no hay sesión válida. */ }

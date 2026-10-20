@@ -11,7 +11,6 @@ let solicitudesGlobales = [];
 
 //avisar cuando alguien crea un pase nuevo
 socket.on('nuevo-pase-creado', (data) => {
-    console.log("Mensaje del servidor:", data.msg);
 //recargamos todo para que aparezca el nuevo
     cargarTodasLasSolicitudes();
 //mostramos el aviso azul de info
@@ -20,10 +19,11 @@ socket.on('nuevo-pase-creado', (data) => {
 
 //avisar cuando alguien crea un permiso nuevo
 socket.on('nuevo-permiso-creado', (data) => {
-    console.log(data.msg);
     cargarTodasLasSolicitudes();
     mostrarToast("¡Nueva solicitud de Permiso recibida!", "info");
 });
+
+socket.on('pase-actualizado', cargarTodasLasSolicitudes);
 
 //avisar si un permiso cambio para refrescar la lista
 socket.on('permiso-actualizado', () => {
@@ -90,6 +90,9 @@ function inicializarCalendario() {
         },
         allDayText: 'Todo el dia',
         initialView: 'dayGridMonth',
+        initialDate: Tramites.hoy(), now: `${Tramites.hoy()}T12:00:00`,
+        eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+        displayEventEnd: true,
         locale: 'es',
         height: '100%',
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listWeek' },
@@ -110,7 +113,9 @@ function inicializarCalendario() {
             }
         },
 //cuando le den clic a un evento del calendario abrimos su info
-        eventClick: (info) => verDetallesModal(info.event.extendedProps)
+        eventClick: (info) => {
+            if (info.event.extendedProps.esTramite && info.event.extendedProps.id) verDetallesModal(info.event.extendedProps);
+        }
     });
     calendarioJefe.render();
 }
@@ -147,7 +152,7 @@ async function cargarTodasLasSolicitudes() {
         console.error("Error en la carga:", error);
         mostrarToast("Error al conectar al servidor", "error");
     }
-} 1
+}
 
 //esto sirve para que el filtro no corra mil veces mientras escribes
 let debounceTimerJefe = null;
@@ -194,46 +199,30 @@ function actualizarPantallaJefe(datos) {
 
 //preparamos los dias feriados para el fondo del calendario
     let eventos = (window.festivosGlobalesJefe || []).map(f => ({
+        id: `festivo-${f.fecha.split('T')[0]}`,
         title: ` ${f.descripcion}`,
         start: f.fecha.split('T')[0],
         display: 'background',
-        backgroundColor: 'rgba(25, 135, 84, 0.2)'
+        backgroundColor: 'rgba(25, 135, 84, 0.2)',
+        extendedProps: { esTramite: false }
     }));
 
     let contadorPendientes = 0;
-    const cumpleaniosAgregados = new Set();
 
 //recorremos los datos filtrados para crear las tarjetas y filas
     datos.forEach((sol, indice) => {
-        const esPase = sol.tipoTramite === 'Pase';
         const fechaMostrar = sol.fecha_uso_h || sol.fecha_inicio_h;
-        const fechaISO = (esPase ? sol.fecha_uso : sol.fecha_inicio).split('T')[0];
 
         //metemos el tramite al calendario con su color de estado
         eventos.push({
-            title: `${sol.nombre_completo}: ${sol.tipoTramite}`,
-            start: fechaISO,
+            ...Tramites.evento(sol),
+            title: `${Tramites.folio(sol)} · ${sol.nombre_completo}`,
             backgroundColor: sol.estado === 'Aprobado' ? '#198754' :
                 (sol.estado === 'Pendiente' ? '#ffc107' :
                     (sol.estado === 'Vo.Bo.' ? '#009186' : '#ff0000')),
             borderColor: 'transparent',
-            extendedProps: { ...sol }
+            extendedProps: { ...sol, esTramite: true }
         });
-
-        //si el docente cumple años lo marcamos en morado
-        if (sol.fecha_nacimiento && !cumpleaniosAgregados.has(sol.id_usuario)) {
-            const cumpleMesDia = sol.fecha_nacimiento.substring(5, 10);
-            const añoActual = new Date().getFullYear();
-            eventos.push({
-                title: `Cumple: ${sol.nombre_completo.split(' ')[0]}`,
-                start: `${añoActual}-${cumpleMesDia}`,
-                allDay: true,
-                backgroundColor: '#6f42c1',
-                borderColor: 'transparent'
-            });
-            cumpleaniosAgregados.add(sol.id_usuario);
-        }
-
 
 //si el tramite esta pendiente lo ponemos en la lista de accion rapida
         if (sol.estado === 'Pendiente') {
@@ -244,6 +233,7 @@ function actualizarPantallaJefe(datos) {
                         <strong class="text-primary fs-6">${Seguridad.escapeHTML(sol.nombre_completo)}</strong>
                         <span class="badge bg-secondary fs-6">${Seguridad.escapeHTML(sol.tipoTramite)}</span>
                     </div>
+                    <div class="small fw-bold text-muted mb-1">${Seguridad.escapeHTML(Tramites.folio(sol))}</div>
                     <p class="text-muted mb-2"><i class="fa-solid fa-calendar-day me-2"></i>${Seguridad.escapeHTML(fechaMostrar)}</p>
                     <div class="d-flex gap-2">
                         <button data-estado="Vo.Bo." class="btn btn-success btn-sm w-50">Dar Vo.Bo.</button>
@@ -255,6 +245,7 @@ function actualizarPantallaJefe(datos) {
 //metemos una fila a la tabla de abajo para el historial completo
         tablaEstadisticas.innerHTML += `
             <tr class="small" data-detalle="${indice}" style="cursor:pointer">
+                <td class="text-nowrap">${Seguridad.escapeHTML(Tramites.folio(sol))}</td>
                 <td>${Seguridad.escapeHTML(sol.nombre_completo)}</td>
                 <td>${Seguridad.escapeHTML(sol.tipoTramite)}</td>
                 <td>${Seguridad.escapeHTML(fechaMostrar)}</td>
@@ -289,6 +280,7 @@ function actualizarPantallaJefe(datos) {
 //refrescamos el calendario con todos los eventos que juntamos
     calendarioJefe.removeAllEventSources();
     calendarioJefe.addEventSource(eventos);
+    calendarioJefe.addEventSource({ events: (rango, success) => success(Tramites.cumpleanos(rango, datos)) });
 }
 
 
@@ -299,6 +291,7 @@ function verDetallesModal(data) {
 
 //ponemos el nombre del docente el motivo y la fecha en que se hizo
     document.getElementById('det-nombre').textContent = data.nombre_completo;
+    document.getElementById('det-folio').textContent = Tramites.folio(data);
     document.getElementById('det-motivo').textContent = data.motivo || 'Sin motivo especificado';
     document.getElementById('det-fecha-creacion').textContent = data.fecha_solicitud_h || 'N/A';
 
@@ -349,7 +342,7 @@ async function cambiarEstado(id, tipo, nuevoEstado) {
         });
         const res = await resp.json();
 //si el servidor dice que todo bien recargamos la lista
-        if (res.ok) { mostrarToast(`Solicitud ${nuevoEstado}`); cargarTodasLasSolicitudes(); }
+        if (res.ok) { mostrarToast(`${Tramites.folio({ tipoTramite: tipo === 'pase' ? 'Pase' : 'Permiso', id })}: ${nuevoEstado}`); cargarTodasLasSolicitudes(); }
     } catch (e) { mostrarToast("Error de conexión", "error"); }
 }
 
@@ -397,7 +390,7 @@ function confirmarAccion(btn, id, tipo, estado) {
     btn.className = "btn btn-warning btn-sm w-50 fw-bold text-dark";
 
     let contador = 3;
-    btn.innerHTML = `Seguro? (${contador}s)`;
+    btn.textContent = `¿Confirmar ${Tramites.folio({ tipoTramite: tipo === 'pase' ? 'Pase' : 'Permiso', id })}? (${contador}s)`;
 
 //ponemos un cronometro que dure tres segundos
     const intervalo = setInterval(() => {
@@ -405,7 +398,7 @@ function confirmarAccion(btn, id, tipo, estado) {
 
         if (contador > 0) {
 //actualizamos el texto del boton con los segundos que faltan
-            btn.innerHTML = `Seguro? (${contador}s)`;
+            btn.textContent = `¿Confirmar ${Tramites.folio({ tipoTramite: tipo === 'pase' ? 'Pase' : 'Permiso', id })}? (${contador}s)`;
         } else {
 //si se acaba el tiempo y no confirmo regresamos todo a la normalidad
             clearInterval(intervalo);

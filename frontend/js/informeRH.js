@@ -1,215 +1,243 @@
-//ruta para conectar con la api
+// Seguridad.cargar valida el rol RRHH antes de ejecutar este archivo.
 const URL_BASE = '/api';
-//sacamos la llave de seguridad de la sesion
-const token = sessionStorage.getItem('token');
-//aca vamos a guardar toda la informacion junta
+const ESTADOS_INFORME = ['Pendiente', 'Vo.Bo.', 'Aprobado', 'Rechazado', 'Cancelado'];
 let dataGlobal = [];
-//objeto para guardar los dibujos de las graficas
+let datosInforme = [];
 let charts = {};
+let hoyEscolar = '';
+let festivosInforme = new Set();
 
-//si no hay llave lo mandamos de regreso al login
-if (!token) window.location.href = "login.html";
+function fechaInforme(valor) {
+    const fecha = String(valor || '').split('T')[0];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return '';
+    const dia = new Date(`${fecha}T12:00:00Z`);
+    return Number.isFinite(dia.getTime()) && dia.toISOString().slice(0, 10) === fecha ? fecha : '';
+}
 
-//cuando la ventana termina de cargar arrancamos todo
-Seguridad.alCargar(async () => {
+async function consultarInforme(ruta) {
+    // El wrapper de Seguridad añade siempre el token vigente y trata sesiones vencidas.
+    const respuesta = await fetch(`${URL_BASE}${ruta}`, { cache: 'no-store' });
+    if (!respuesta.ok) throw new Error('No se pudo consultar el informe. Revisa tu sesión y vuelve a intentar.');
+    const datos = await respuesta.json();
+    if (datos.ok === false) throw new Error('No se pudo consultar el informe. Vuelve a intentar.');
+    return datos;
+}
+
+async function cargarInforme() {
+    const mensaje = document.getElementById('mensaje-informe');
+    const boton = document.getElementById('btn-recargar-informe');
+    boton.disabled = true;
+    mensaje.textContent = 'Cargando información…';
     try {
-        //pedimos los pases y los permisos al mismo tiempo para no tardar
-        const [resPases, resPermisos] = await Promise.all([
-            fetch(`${URL_BASE}/pases/todos`, { headers: { 'x-token': token } }),
-            fetch(`${URL_BASE}/permisos/todos`, { headers: { 'x-token': token } })
+        const [pases, permisos, config, festivos] = await Promise.all([
+            consultarInforme('/pases/todos'), consultarInforme('/permisos/todos'),
+            consultarInforme('/negocio/config'), consultarInforme('/dias/ver')
         ]);
-
-        //convertimos la respuesta del servidor en listas de datos
-        const pasesRaw = (await resPases.json()).data || [];
-        const permisosRaw = (await resPermisos.json()).data || [];
-
-        //acomodamos los pases para que tengan el mismo formato
-        const pases = pasesRaw.map(p => ({
-            ...p,
-            tipo: 'Pase',
-            fechaClave: p.fecha_uso.split('T')[0],
-            diasImpacto: 0.1 //un pase vale como un ratito del dia
-        }));
-
-        //acomodamos los permisos con sus dias completos
-        const permisos = permisosRaw.map(p => ({
-            ...p,
-            tipo: 'Permiso',
-            fechaClave: p.fecha_inicio.split('T')[0],
-            diasImpacto: parseFloat(p.cantidad_dias || 1) //usamos los dias que vienen de la base
-        }));
-
-        //juntamos todo en la lista global y dibujamos el tablero
-        dataGlobal = [...pases, ...permisos];
+        if (!Array.isArray(pases.data) || !Array.isArray(permisos.data) || !Array.isArray(festivos) || !fechaInforme(config.hoy)) {
+            throw new Error('El servidor devolvió información incompleta. Vuelve a intentar.');
+        }
+        hoyEscolar = config.hoy;
+        festivosInforme = new Set(festivos.map(f => fechaInforme(f.fecha)).filter(Boolean));
+        const normalizar = (registro, tipo) => {
+            const fechaClave = fechaInforme(tipo === 'Pase' ? registro.fecha_uso : registro.fecha_inicio);
+            const fechaFin = tipo === 'Pase' ? fechaClave : fechaInforme(registro.fecha_fin);
+            const dias = Number(registro.cantidad_dias);
+            if (!fechaClave || !fechaFin || fechaFin < fechaClave || !ESTADOS_INFORME.includes(registro.estado) ||
+                (tipo === 'Permiso' && (!Number.isFinite(dias) || dias <= 0))) {
+                throw new Error('Hay registros con fechas, días o estados incompletos. El informe no se calculó; revisa los datos.');
+            }
+            return { ...registro, tipo, fechaClave, fechaFin, diasImpacto: tipo === 'Permiso' ? dias : 0 };
+        };
+        dataGlobal = [...pases.data.map(p => normalizar(p, 'Pase')), ...permisos.data.map(p => normalizar(p, 'Permiso'))];
+        document.getElementById('fecha-reporte').textContent = `Día escolar: ${hoyEscolar} · ${config.zonaHoraria || 'America/Mexico_City'}`;
         recargarDashboard();
-
     } catch (error) {
-        //si algo falla mostramos el error en la consola
-        console.error("Fallo crítico en dashboard:", error);
-    }
-});
+        dataGlobal = [];
+        datosInforme = [];
+        recargarDashboard();
+        mensaje.textContent = error.message || 'No hay conexión. Vuelve a intentar.';
+        mensaje.className = 'alert alert-danger';
+        document.getElementById('btn-exportar-informe').disabled = true;
+    } finally { boton.disabled = false; }
+}
 
-//esta funcion actualiza los numeros y las graficas
 function recargarDashboard() {
-    //miramos si el usuario eligio un mes en el filtro
-    const filtroMes = document.getElementById('filtro-mes-graficos').value;
-    //si hay filtro cortamos la lista y si no usamos todo
-    let datos = filtroMes ? dataGlobal.filter(d => d.fechaClave.startsWith(filtroMes)) : dataGlobal;
-
-    //sacamos la fecha de hoy para los contadores
-    const hoy = new Date().toISOString().split('T')[0];
-    //filtramos solo lo que ya esta aceptado
-    const aprobados = datos.filter(d => d.estado === 'Aprobado');
-
-    //ponemos los numeros en los cuadritos de texto de la pantalla
-    document.getElementById('stat-hoy').textContent = datos.filter(d => d.fechaClave === hoy).length;
-    document.getElementById('stat-total').textContent = datos.length;
-
-    //sumamos todos los dias de falta para ver el total
-    const diasTotales = aprobados.reduce((acc, curr) => acc + curr.diasImpacto, 0).toFixed(1);
-    document.getElementById('stat-dias').textContent = diasTotales;
-
-    //calculamos el porcentaje de cosas aprobadas
-    const tasa = datos.length > 0 ? ((aprobados.length / datos.length) * 100).toFixed(0) : 0;
-    document.getElementById('stat-tasa').textContent = `${tasa}%`;
-
-    //limpiamos los dibujos viejos antes de hacer los nuevos
+    const mes = document.getElementById('filtro-mes-graficos').value;
+    const tipo = document.getElementById('filtro-tipo-informe').value;
+    const estado = document.getElementById('filtro-estado-informe').value;
+    datosInforme = dataGlobal.filter(d => (!mes || d.fechaClave.startsWith(mes)) && (!tipo || d.tipo === tipo) && (!estado || d.estado === estado));
+    const aprobados = datosInforme.filter(d => d.estado === 'Aprobado');
+    const decisiones = datosInforme.filter(d => d.estado === 'Aprobado' || d.estado === 'Rechazado');
+    document.getElementById('stat-hoy').textContent = datosInforme.filter(d => d.fechaClave === hoyEscolar).length;
+    document.getElementById('stat-total').textContent = datosInforme.length;
+    document.getElementById('stat-dias').textContent = aprobados.reduce((total, d) => total + d.diasImpacto, 0);
+    const horasPases = aprobados.filter(d => d.tipo === 'Pase').reduce((total, d) => total + horasPaseInforme(d), 0);
+    document.getElementById('stat-horas').textContent = new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 }).format(horasPases);
+    document.getElementById('stat-tasa').textContent = decisiones.length ? `${Math.round(aprobados.length / decisiones.length * 100)}%` : 'Sin decisiones';
+    document.getElementById('stat-vobo').textContent = datosInforme.filter(d => d.estado === 'Vo.Bo.').length;
+    document.getElementById('periodo-informe').textContent = mes ? `Periodo de uso/inicio: ${mes}` : 'Histórico de uso/inicio completo';
+    const mensaje = document.getElementById('mensaje-informe');
+    mensaje.className = 'alert alert-info';
+    mensaje.textContent = datosInforme.length ? `${datosInforme.length} trámites coinciden con los filtros.` : 'No hay trámites que coincidan con los filtros.';
+    document.getElementById('btn-exportar-informe').disabled = !datosInforme.length;
     limpiarCharts();
-
-    //dibujamos la grafica de circulo para pases y permisos
-    renderDoughnut(datos.filter(d => d.tipo === 'Pase').length, datos.filter(d => d.tipo === 'Permiso').length);
-
-    //contamos cuantos tramites tiene cada area de la escuela
-    const areas = {};
-    datos.forEach(d => {
-        const a = d.area_adscripcion || 'No Definida';
-        areas[a] = (areas[a] || 0) + 1;
-    });
-    //dibujamos las barras de los departamentos
+    renderDoughnut(datosInforme.filter(d => d.tipo === 'Pase').length, datosInforme.filter(d => d.tipo === 'Permiso').length);
+    const areas = new Map();
+    datosInforme.forEach(d => { const area = d.area_adscripcion || 'Sin área registrada'; areas.set(area, (areas.get(area) || 0) + 1); });
     renderAreas(areas);
-
-    //dibujamos la linea de tiempo con la actividad
-    renderTendencia(datos);
-
-    //llenamos las tablas de los maestros y los choques de horario
-    renderRanking(datos);
-    renderColisiones(datos);
+    renderTendencia(datosInforme);
+    renderRanking(datosInforme);
+    renderColisiones(datosInforme);
 }
 
-//crea la grafica de dona con los tipos de tramites
-function renderDoughnut(p, m) {
-    charts.tipos = new Chart(document.getElementById('chartTipos'), {
-        type: 'doughnut',
-        data: {
-            labels: ['Pases', 'Permisos'],
-            datasets: [{ data: [p, m], backgroundColor: ['#009186', '#0648a3'], borderWeight: 0 }]
-        },
-        options: { maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom' } } }
+function dibujarGrafica(clave, id, config) {
+    const canvas = document.getElementById(id);
+    if (typeof Chart !== 'function') {
+        canvas.hidden = true;
+        const aviso = document.getElementById('aviso-graficas');
+        aviso.hidden = false;
+        return;
+    }
+    charts[clave] = new Chart(canvas, { ...config, options: { responsive: true, maintainAspectRatio: false, animation: false, ...config.options } });
+}
+
+function renderDoughnut(pases, permisos) {
+    dibujarGrafica('tipos', 'chartTipos', {
+        type: 'doughnut', data: { labels: ['Pases', 'Permisos'], datasets: [{ data: [pases, permisos], backgroundColor: ['#009186', '#0648a3'] }] },
+        options: { cutout: '65%', plugins: { legend: { position: 'bottom' } } }
     });
 }
 
-//crea las barras horizontales para las areas
-function renderAreas(objAreas) {
-    //ordenamos de mayor a menor y agarramos las primeras seis
-    const labels = Object.keys(objAreas).sort((a,b) => objAreas[b] - objAreas[a]).slice(0, 6);
-    charts.areas = new Chart(document.getElementById('chartAreas'), {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{ label: 'Total Trámites', data: labels.map(l => objAreas[l]), backgroundColor: '#4c51bf', borderRadius: 8 }]
-        },
-        options: {
-            indexAxis: 'y',
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } }
-        }
+function renderAreas(areas) {
+    const mayores = [...areas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+    dibujarGrafica('areas', 'chartAreas', {
+        type: 'bar', data: { labels: mayores.map(([area]) => area), datasets: [{ label: 'Trámites', data: mayores.map(([, total]) => total), backgroundColor: '#4c51bf' }] },
+        options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } }
     });
 }
 
-//crea la grafica de linea para ver la tendencia
 function renderTendencia(datos) {
-    const timeline = {};
-    //agarramos los ultimos registros para ver como va la semana
-    datos.slice(0, 30).reverse().forEach(d => {
-        timeline[d.fechaClave] = (timeline[d.fechaClave] || 0) + 1;
-    });
-
-    charts.tendencia = new Chart(document.getElementById('chartTendencia'), {
-        type: 'line',
-        data: {
-            labels: Object.keys(timeline),
-            datasets: [{
-                data: Object.values(timeline),
-                borderColor: '#009186',
-                backgroundColor: 'rgba(0,145,134,0.1)',
-                fill: true,
-                tension: 0.4
-            }]
-        },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
+    const dias = new Map();
+    datos.forEach(d => dias.set(d.fechaClave, (dias.get(d.fechaClave) || 0) + 1));
+    const fechas = [...dias.keys()].sort();
+    dibujarGrafica('tendencia', 'chartTendencia', {
+        type: 'line', data: { labels: fechas, datasets: [{ label: 'Trámites con inicio en la fecha', data: fechas.map(f => dias.get(f)), borderColor: '#009186', backgroundColor: 'rgba(0,145,134,0.1)', fill: true }] },
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
     });
 }
 
-//llena la tabla de los maestros que mas piden permisos
+function filaInforme(valores) {
+    const fila = document.createElement('tr');
+    valores.forEach(valor => { const celda = document.createElement('td'); celda.textContent = String(valor ?? ''); fila.appendChild(celda); });
+    return fila;
+}
+
 function renderRanking(datos) {
-    const docentes = Object.create(null);
-    //contamos cada vez que aparece un nombre
+    const docentes = new Map();
     datos.forEach(d => {
-        docentes[d.nombre_completo] = (docentes[d.nombre_completo] || 0) + 1;
+        const id = d.usuario_id ?? d.id_usuario ?? `nombre:${d.nombre_completo}`;
+        const docente = docentes.get(id) || { nombre: d.nombre_completo || 'Sin nombre', total: 0 };
+        docente.total++;
+        docentes.set(id, docente);
     });
-
-    //ordenamos la lista y solo mostramos a los cinco primeros
-    const sorted = Object.entries(docentes).sort((a,b) => b[1] - a[1]).slice(0, 5);
     const tbody = document.getElementById('tabla-top-docentes');
-    //metemos el html en la tabla con una barra de progreso
-    tbody.innerHTML = sorted.map(([nombre, total]) => `
-        <tr>
-            <td class="fw-bold">${Seguridad.escapeHTML(nombre.split(' ').slice(0,2).join(' '))}</td>
-            <td class="text-center"><span class="badge-soft badge-soft-teal">${total}</span></td>
-            <td><div class="progress" style="height: 6px;"><div class="progress-bar bg-teal" style="background:#009186; width: ${Math.min(total*10, 100)}%"></div></div></td>
-        </tr>
-    `).join('') || '<tr><td colspan="3" class="text-center py-3">Sin actividad</td></tr>';
+    tbody.replaceChildren();
+    [...docentes.values()].sort((a, b) => b.total - a.total).slice(0, 5).forEach(d => tbody.appendChild(filaInforme([d.nombre, d.total])));
+    if (!docentes.size) tbody.appendChild(filaInforme(['Sin actividad', '—']));
 }
 
-//revisa si hay varios maestros de la misma area faltando el mismo dia
 function renderColisiones(datos) {
-    const col = Object.create(null);
-    datos.forEach(d => {
-        //si esta rechazado o no tiene area no nos importa para el choque
-        if(d.estado === 'Rechazado' || !d.area_adscripcion) return;
-        //creamos una llave con la fecha y el area
-        const key = `${d.fechaClave}|${d.area_adscripcion}`;
-        if(!col[key]) col[key] = [];
-        //guardamos el nombre del maestro en ese grupo
-        col[key].push(d.nombre_completo);
-    });
-
-    const tbody = document.getElementById('tabla-colisiones');
-    tbody.innerHTML = '';
-    let count = 0;
-
-    //recorremos los grupos y si hay mas de uno avisamos
-    for (const [key, profes] of Object.entries(col)) {
-        if (profes.length > 1) {
-            count++;
-            const [f, a] = key.split('|');
-            tbody.innerHTML += `
-                <tr>
-                    <td><i class="fa-solid fa-calendar-day me-2 text-muted"></i>${Seguridad.escapeHTML(f)}</td>
-                    <td><span class="badge-soft badge-soft-red">${Seguridad.escapeHTML(a)}</span></td>
-                    <td class="small fw-semibold text-dark">${Seguridad.escapeHTML(profes.join(', '))}</td>
-                </tr>`;
+    // Una alerta requiere dos personas distintas de la misma área y horarios que se superponen.
+    const activos = datos.filter(d => ['Pendiente', 'Aprobado', 'Vo.Bo.'].includes(d.estado) && d.area_adscripcion);
+    const coincidencias = new Map();
+    for (let i = 0; i < activos.length; i++) {
+        const a = activos[i];
+        for (let j = i + 1; j < activos.length; j++) {
+            const b = activos[j];
+            const uidA = String(a.usuario_id ?? a.id_usuario ?? a.nombre_completo);
+            const uidB = String(b.usuario_id ?? b.id_usuario ?? b.nombre_completo);
+            if (uidA === uidB || a.area_adscripcion !== b.area_adscripcion) continue;
+            if (a.tipo === 'Pase' && b.tipo === 'Pase' &&
+                !(String(a.hora_inicio) < String(b.hora_fin) && String(b.hora_inicio) < String(a.hora_fin))) continue;
+            const inicio = a.fechaClave > b.fechaClave ? a.fechaClave : b.fechaClave;
+            const fin = a.fechaFin < b.fechaFin ? a.fechaFin : b.fechaFin;
+            if (inicio > fin) continue;
+            const dia = new Date(`${inicio}T12:00:00Z`);
+            const ultimo = new Date(`${fin}T12:00:00Z`);
+            while (dia <= ultimo) {
+                const fecha = dia.toISOString().slice(0, 10);
+                if (dia.getUTCDay() !== 0 && dia.getUTCDay() !== 6 && !festivosInforme.has(fecha)) {
+                    const key = JSON.stringify([fecha, a.area_adscripcion]);
+                    const grupo = coincidencias.get(key) || { fecha, area: a.area_adscripcion, personas: new Map() };
+                    [a, b].forEach(d => {
+                        const id = String(d.usuario_id ?? d.id_usuario ?? d.nombre_completo);
+                        const persona = grupo.personas.get(id) || { nombre: d.nombre_completo || 'Sin nombre', estados: new Set() };
+                        persona.estados.add(d.estado === 'Vo.Bo.' ? 'Vo.Bo. pendiente de RH' : d.estado);
+                        grupo.personas.set(id, persona);
+                    });
+                    coincidencias.set(key, grupo);
+                }
+                dia.setUTCDate(dia.getUTCDate() + 1);
+            }
         }
     }
-    //ponemos el numero de choques en el aviso rojo
-    document.getElementById('badge-colisiones').textContent = count;
-    //si no hay problemas ponemos un mensaje de exito
-    if(count === 0) tbody.innerHTML = '<tr><td colspan="3" class="text-center py-3 text-success small"><i class="fa-solid fa-circle-check me-2"></i>Sin conflictos detectados</td></tr>';
+    const tbody = document.getElementById('tabla-colisiones');
+    tbody.replaceChildren();
+    [...coincidencias.values()].sort((a, b) => a.fecha.localeCompare(b.fecha)).forEach(g => {
+        tbody.appendChild(filaInforme([g.fecha, g.area, [...g.personas.values()].map(p => `${p.nombre} (${[...p.estados].join(', ')})`).join('; ')]));
+    });
+    document.getElementById('badge-colisiones').textContent = coincidencias.size;
+    if (!coincidencias.size) tbody.appendChild(filaInforme(['Sin coincidencias en los registros filtrados', '—', '—']));
 }
 
-//borra los objetos de las graficas para que no den problemas al recargar
+function horasPaseInforme(registro) {
+    const minutos = valor => {
+        const partes = String(valor || '').split(':').map(Number);
+        return partes.length >= 2 && partes.every(Number.isFinite) ? partes[0] * 60 + partes[1] + (partes[2] || 0) / 60 : 0;
+    };
+    return Math.max(0, minutos(registro.hora_fin) - minutos(registro.hora_inicio)) / 60;
+}
+
+function celdaCSVInforme(valor) {
+    let texto = String(valor ?? '');
+    // Neutraliza fórmulas incluso con espacios o controles delante; conserva comillas y saltos válidos de CSV.
+    if (/^[\s\u0000-\u001f]*[=+\-@]/.test(texto) || /^[\t\r\n]/.test(texto)) texto = `'${texto}`;
+    return `"${texto.replace(/"/g, '""')}"`;
+}
+
+function exportarInforme() {
+    if (!datosInforme.length) return;
+    const filas = [['Folio', 'Tipo', 'Docente', 'Área', 'Fecha de uso/inicio', 'Fecha fin', 'Estado', 'Días de permiso', 'Horas de pase', 'Hora inicio', 'Hora fin', 'Fecha solicitud', 'Motivo']];
+    datosInforme.forEach(d => filas.push([
+        d.folio || `${d.tipo === 'Pase' ? 'PASE' : 'PERM'}-${String(d.id).padStart(8, '0')}`,
+        d.tipo, d.nombre_completo, d.area_adscripcion, d.fechaClave, d.fechaFin, d.estado,
+        d.tipo === 'Permiso' ? d.diasImpacto : '', d.tipo === 'Pase' ? horasPaseInforme(d) : '', d.hora_inicio, d.hora_fin, d.fecha_solicitud, d.motivo
+    ]));
+    const archivo = new Blob(['\uFEFF', filas.map(f => f.map(celdaCSVInforme).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(archivo);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = `Informe_RH_${document.getElementById('filtro-mes-graficos').value || 'historico'}_${hoyEscolar}.csv`;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function limpiarCharts() {
-    Object.values(charts).forEach(c => c.destroy());
+    Object.values(charts).forEach(chart => chart.destroy());
     charts = {};
 }
-Seguridad.alCargar(() => document.getElementById('btn-logout')?.addEventListener('click', () => Seguridad.salir()));
+
+Seguridad.alCargar(() => {
+    document.getElementById('btn-logout').addEventListener('click', () => Seguridad.salir());
+    document.getElementById('btn-logout-movil').addEventListener('click', () => Seguridad.salir());
+    ['filtro-mes-graficos', 'filtro-tipo-informe', 'filtro-estado-informe'].forEach(id => document.getElementById(id).addEventListener('change', recargarDashboard));
+    document.getElementById('btn-limpiar-informe').addEventListener('click', () => {
+        ['filtro-mes-graficos', 'filtro-tipo-informe', 'filtro-estado-informe'].forEach(id => { document.getElementById(id).value = ''; });
+        recargarDashboard();
+    });
+    document.getElementById('btn-exportar-informe').addEventListener('click', exportarInforme);
+    document.getElementById('btn-recargar-informe').addEventListener('click', cargarInforme);
+    cargarInforme();
+});

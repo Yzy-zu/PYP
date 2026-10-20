@@ -4,7 +4,7 @@ const pasesql = {
     //consulta para obtener pases de un usuario especifico
     obtenerPases: async (id) => {
         try {
-            const sql = `SELECT p.*, u.nombre_completo, 
+            const sql = `SELECT p.*, u.nombre_completo, u.area_adscripcion,
                         DATE_FORMAT(p.fecha_uso, '%d/%m/%Y') AS fecha_uso_h,
                         DATE_FORMAT(p.fecha_solicitud, '%d/%m/%Y %H:%i') AS fecha_solicitud_h
                         FROM pases_salida p
@@ -25,6 +25,7 @@ const pasesql = {
             const sql = `SELECT 
     p.*, 
     u.nombre_completo,
+    u.area_adscripcion,
     ur.nombre_completo AS revisado_por_nombre, 
     DATE_FORMAT(p.fecha_uso, '%d/%m/%Y') AS fecha_uso_h,
     DATE_FORMAT(p.fecha_solicitud, '%d/%m/%Y %H:%i') AS fecha_solicitud_h,

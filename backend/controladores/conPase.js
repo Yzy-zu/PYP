@@ -4,6 +4,7 @@ const { enviarNotificacionEstado } = require('../correos/correo');
 const negocio = require('../negocio/tramites');
 const { responderError } = require('../negocio/reglas');
 const { notificar } = require('../seguridad/acceso');
+const { folio } = require('../documentos/historial');
 
 
 const pasesControlador = {
@@ -21,7 +22,7 @@ const pasesControlador = {
         try {
             const { id } = req.usuario;
             const pases = await pasesSql.obtenerPases(id);
-            res.json({ ok: true, data: pases });
+            res.json({ ok: true, data: pases.map(p => ({ ...p, folio: folio('pase', p.id) })) });
         } catch (error) {
             res.status(500).json({ ok: false, msg: "error al obtener pases" });
         }
@@ -31,7 +32,7 @@ const pasesControlador = {
     verTodos: async (req, res) => {
         try {
             const pases = await pasesSql.obtenerTodos();
-            res.json({ ok: true, data: pases });
+            res.json({ ok: true, data: pases.map(p => ({ ...p, folio: folio('pase', p.id) })) });
         } catch (error) {
             res.status(500).json({ ok: false, msg: "error al obtener todos los pases" });
         }

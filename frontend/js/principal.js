@@ -24,7 +24,7 @@ let metodoPendiente = null;
 let festivosGlobales = [];
 // El servidor fija el día escolar; el navegador puede estar en otra zona horaria.
 let configNegocio = {
-    hoy: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+    hoy: Tramites.hoy(),
     maxDiasPermiso: 1,
     cumpleanosInhabil: false
 };
@@ -312,6 +312,7 @@ function verDetallesSolicitud(data) {
 //chequeamos si es un pase de horas o un permiso de dias
     const esPase = data.tipoTramite === 'Pase';
     document.getElementById('v-det-tipo').textContent = data.tipoTramite;
+    document.getElementById('v-det-folio').textContent = Tramites.folio(data);
     document.getElementById('v-det-motivo').textContent = data.motivo || 'Sin motivo';
 
     cargarDocumentoSolicitud(data, 'v-cont-revision');
@@ -379,28 +380,25 @@ async function cargarDatosYActualizarCalendario() {
 
             //creamos los cuadritos que se van a ver en el calendario con sus colores
             const eventosTramites = todosLosRegistrosGlobal.map(reg => ({
-                title: `${reg.tipoTramite}: ${reg.estado}`,
-                start: reg.fechaClave.split('T')[0],
+                ...Tramites.evento(reg),
+                title: `${Tramites.folio(reg)} · ${reg.estado}`,
                 //verde para aprobado celeste para visto bueno amarillo para pendiente y rojo para lo demas
                 backgroundColor: reg.estado === 'Aprobado' ? '#198754' :
                     (reg.estado === 'Vo.Bo.' ? '#02c4ff' :
                         (reg.estado === 'Pendiente' ? '#ffc107' : '#dc3545')),
                 borderColor: 'transparent',
-                extendedProps: { ...reg }
+                extendedProps: { ...reg, esTramite: true }
             }));
 
             //marcamos los dias que no son laborables con un fondo verde clarito
             const eventosFestivos = festivosGlobales.map(f => ({
+                id: `festivo-${f.fecha.split('T')[0]}`,
                 title: ` ${f.descripcion}`,
                 start: f.fecha.split('T')[0],
                 display: 'background',
                 backgroundColor: 'rgba(25, 135, 84, 0.2)',
-                extendedProps: { esBloqueado: true, msg: f.descripcion }
+                extendedProps: { esBloqueado: true, esTramite: false, msg: f.descripcion }
             }));
-
-            //sacamos el dia del cumple del usuario para felicitarlo
-            const cumpleMesDia = usuario?.fecha_nacimiento ? usuario.fecha_nacimiento.substring(5, 10) : null;
-            const añoActual = configNegocio.hoy.substring(0, 4);
 
             //actualizamos la lista de abajo y los contadores de colores
             pintarHistorial(todosLosRegistrosGlobal);
@@ -410,18 +408,10 @@ async function cargarDatosYActualizarCalendario() {
             calendarioOficial.addEventSource(eventosTramites);
             calendarioOficial.addEventSource(eventosFestivos);
 
-            //El cumpleaños se marca y permite abrir su solicitud de día adicional.
-            if (cumpleMesDia) {
-                const eventoCumple = {
-                    title: "Cumpleaños",
-                    start: `${añoActual}-${cumpleMesDia}`,
-                    backgroundColor: '#ffc107',
-                    borderColor: '#ffc107',
-                    allDay: true,
-                    extendedProps: { esCumpleanos: true }
-                };
-                calendarioOficial.addEventSource([eventoCumple]);
-            }
+            // Se recalcula con el rango visible, incluidos los cambios de año.
+            calendarioOficial.addEventSource({ events: (rango, success) => {
+                success(Tramites.cumpleanos(rango, [usuario]).map(evento => ({ ...evento, title: 'Cumpleaños', backgroundColor: '#ffc107' })));
+            } });
             actualizarLimitesFechaFin();
             actualizarPresupuestoSalidas();
         }
@@ -438,6 +428,8 @@ function pintarCalendario(eventos) {
         initialView: 'dayGridMonth', locale: 'es', height: '100%',
         initialDate: configNegocio.hoy, now: `${configNegocio.hoy}T12:00:00`,
         events: eventos,
+        eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+        displayEventEnd: true,
         buttonText: {
             today: 'Hoy',
             month: 'mes',
@@ -497,14 +489,13 @@ function pintarCalendario(eventos) {
                 mostrarToast("No puedes solicitar dias pasados", "error");
                 return;
             }
-            //avisamos porque el dia esta bloqueado
-            if (info.dayEl.classList.contains('dia-bloqueado') || info.date.getDay() === 0 || info.date.getDay() === 6) {
-                if (verificarDias(info.dateStr)) {
-                    mostrarToast("Ya tienes un trámite activo para este día", "error");
-                } else {
-                    const esCumple = usuario?.fecha_nacimiento && info.dateStr.substring(5, 10) === usuario.fecha_nacimiento.substring(5, 10);
-                    mostrarToast(esCumple ? "Feliz cumpleaños!!!" : "No hay labores este dia", "info");
-                }
+            // Consulta los datos vigentes también después de una sincronización del calendario.
+            if (verificarDias(info.dateStr)) {
+                mostrarToast('Ya tienes un trámite activo para este día', 'error');
+                return;
+            }
+            if (!esDiaLaborable(info.dateStr)) {
+                mostrarToast('No hay labores este día', 'info');
                 return;
             }
 
@@ -523,7 +514,7 @@ function pintarCalendario(eventos) {
                 abrirSolicitudEnFecha(fecha, true);
                 return;
             }
-            if (info.event.extendedProps.esBloqueado) return;
+            if (!info.event.extendedProps.esTramite || !info.event.extendedProps.id) return;
             verDetallesSolicitud(info.event.extendedProps);
         }
     });
@@ -579,6 +570,7 @@ function pintarHistorial(registros) {
 //metemos todo el diseño de la tarjeta con sus datos y etiquetas
         div.innerHTML = `
             <div class="card-body p-2">
+                <div class="small fw-bold text-muted mb-1">${Seguridad.escapeHTML(Tramites.folio(reg))}</div>
                 <div class="d-flex justify-content-between align-items-center mb-1">
                     <span class="fw-bold small text-truncate pe-2" style="max-width: 65%;">${Seguridad.escapeHTML(reg.motivo || 'Sin motivo')}</span>
                     <span class="text-muted" style="font-size: 0.75rem;">${Seguridad.escapeHTML(fechaParaMostrar)}</span>
@@ -655,7 +647,7 @@ function cancelarSolicitud(tipo, id) {
         <div class="text-center">
             <i class="fa-solid fa-circle-exclamation text-danger mb-3" style="font-size: 3rem;"></i>
             <h5 class="mb-2">¿Confirmas la cancelación?</h5>
-            <p class="text-muted">Estás a punto de cancelar tu <strong>${Seguridad.escapeHTML(tipo)}</strong> con folio <strong>#${Seguridad.escapeHTML(id)}</strong>.</p>
+            <p class="text-muted">Estás a punto de cancelar tu <strong>${Seguridad.escapeHTML(tipo)}</strong> con folio <strong>${Seguridad.escapeHTML(Tramites.folio({ tipoTramite: tipo, id }))}</strong>.</p>
             <div class="alert alert-warning py-2 small">
                 <i class="fa-solid fa-info-circle me-1"></i> Esta acción no se puede deshacer.
             </div>
@@ -684,7 +676,7 @@ document.getElementById('form-pedir-pase').addEventListener('submit', (e) => {
 //decidimos si vamos a crear uno nuevo o a modificar uno viejo
     urlPendiente = editandoId ? `${URL_BASE}/pases/mod` : `${URL_BASE}/pases/crear`;
     metodoPendiente = editandoId ? 'PATCH' : 'POST';
-    document.getElementById('conf-resumen').innerHTML = `<strong>Pase</strong>: ${Seguridad.escapeHTML(fechaUso)} de ${Seguridad.escapeHTML(hInicio)} a ${Seguridad.escapeHTML(hFin)}`;
+    document.getElementById('conf-resumen').innerHTML = `<strong>${editandoId ? Seguridad.escapeHTML(Tramites.folio({ tipoTramite: 'Pase', id: editandoId })) : 'Nuevo pase'}</strong>: ${Seguridad.escapeHTML(fechaUso)} de ${Seguridad.escapeHTML(hInicio)} a ${Seguridad.escapeHTML(hFin)}`;
     modalConfirmacionInstancia.show();
 });
 
@@ -715,7 +707,7 @@ document.getElementById('form-pedir-permiso').addEventListener('submit', (e) => 
 //preparamos la ruta de la api para guardar los cambios
     urlPendiente = editandoId ? `${URL_BASE}/permisos/mod` : `${URL_BASE}/permisos/crear`;
     metodoPendiente = editandoId ? 'PATCH' : 'POST';
-    document.getElementById('conf-resumen').innerHTML = `<strong>Permiso</strong>: ${Seguridad.escapeHTML(tipo)} del ${Seguridad.escapeHTML(fechaI)} al ${Seguridad.escapeHTML(fechaF)}`;
+    document.getElementById('conf-resumen').innerHTML = `<strong>${editandoId ? Seguridad.escapeHTML(Tramites.folio({ tipoTramite: 'Permiso', id: editandoId })) : 'Nuevo permiso'}</strong>: ${Seguridad.escapeHTML(tipo)} del ${Seguridad.escapeHTML(fechaI)} al ${Seguridad.escapeHTML(fechaF)}`;
     modalConfirmacionInstancia.show();
 });
 

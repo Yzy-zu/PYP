@@ -5,6 +5,7 @@ const { tokenRoot, datosPublicos, cerrarSockets, roles } = require('../seguridad
 const { passwordValida } = require('../seguridad/credenciales');
 const negocio = require('../negocio/tramites');
 const { responderError } = require('../negocio/reglas');
+const { folio } = require('../documentos/historial');
 
 const areas = ['Tecnologías de la Información', 'Gastronomía', 'Enfermería', 'Energías Renovables', 'Mantenimiento Industrial', 'Contabilidad'];
 const categorias = ['Profesor de Asignatura', 'Profesor de Tiempo Completo', 'Técnico Académico', 'Administrativo'];
@@ -159,7 +160,7 @@ const rootControlador = {
     }),
     getPases: endpoint(async (req, res) => {
         const [data] = await db.query('SELECT * FROM pases_salida');
-        res.json({ ok: true, data });
+        res.json({ ok: true, data: data.map(p => ({ ...p, folio: folio('pase', p.id) })) });
     }),
     overridePase: endpoint(async (req, res) => {
         await negocio.guardar('pase', req.body, req.usuario, Number(req.params.id), true);
@@ -170,7 +171,7 @@ const rootControlador = {
     }),
     getPermisos: endpoint(async (req, res) => {
         const [data] = await db.query('SELECT * FROM permisos_goce');
-        res.json({ ok: true, data });
+        res.json({ ok: true, data: data.map(p => ({ ...p, folio: folio('permiso', p.id) })) });
     }),
     overridePermiso: endpoint(async (req, res) => {
         const [[actual]] = await db.execute('SELECT motivo FROM permisos_goce WHERE id=?', [req.params.id]);
