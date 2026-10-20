@@ -319,6 +319,7 @@ main().catch(error => {
     try {
         if (ids.length) {
             const placeholders = ids.map(() => '?').join(',');
+            await db.execute(`DELETE FROM revisiones_tramites WHERE propietario_id IN (${placeholders})`, ids);
             // Eliminar primero referencias revisor/propietario de nuestros fixtures.
             await db.execute(`DELETE FROM pases_salida WHERE usuario_id IN (${placeholders})`, ids);
             await db.execute(`DELETE FROM permisos_goce WHERE usuario_id IN (${placeholders})`, ids);

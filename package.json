@@ -11,6 +11,7 @@
     "db:verify": "node backend/scripts/local-db.js verify",
     "db:stop": "node backend/scripts/local-db.js stop",
     "check:security": "node backend/scripts/check-security.js",
-    "check:business": "node backend/scripts/check-business.js"
+    "check:business": "node backend/scripts/check-business.js",
+    "check:documents": "node backend/scripts/check-documents.js"
   }
 }

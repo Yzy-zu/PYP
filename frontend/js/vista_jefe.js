@@ -72,7 +72,6 @@ Seguridad.alCargar(() => {
         Seguridad.salir();
     });
 //prendemos el pdf el calendario y traemos los datos
-    inicializarMotorPDF();
     inicializarCalendario();
     cargarTodasLasSolicitudes();
 });
@@ -247,7 +246,7 @@ function actualizarPantallaJefe(datos) {
                     </div>
                     <p class="text-muted mb-2"><i class="fa-solid fa-calendar-day me-2"></i>${Seguridad.escapeHTML(fechaMostrar)}</p>
                     <div class="d-flex gap-2">
-                        <button data-estado="Vo.Bo." class="btn btn-success btn-sm w-50">Aprobar</button>
+                        <button data-estado="Vo.Bo." class="btn btn-success btn-sm w-50">Dar Vo.Bo.</button>
                         <button data-estado="Rechazado" class="btn btn-danger btn-sm w-50">Rechazar</button>
                     </div>
                 </div>`;
@@ -308,20 +307,7 @@ function verDetallesModal(data) {
     const contHoras = document.getElementById('det-contenedor-horas');
     const contFin = document.getElementById('det-contenedor-fin');
     const contDias = document.getElementById('det-contenedor-dias');
-    const contRevision = document.getElementById('det-contenedor-revision');
-
-//si la solicitud ya se reviso mostramos quien la checo y en que momento
-    if (data.estado !== 'Pendiente' && data.revisado_por_nombre) {
-        contRevision.style.display = 'block';
-        document.getElementById('det-revisado-por').textContent = data.revisado_por_nombre;
-
-        const f = new Date(data.fecha_revision);
-        document.getElementById('det-fecha-revision').textContent =
-            `${f.toLocaleDateString()} - ${f.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } else {
-//si sigue pendiente mejor escondemos la parte de la revision
-        contRevision.style.display = 'none';
-    }
+    cargarDocumentoSolicitud(data, 'det-contenedor-revision');
 
 //configuramos la vista si es un pase de unas cuantas horas
     if (esPase) {
@@ -336,50 +322,6 @@ function verDetallesModal(data) {
         contHoras.style.display = 'none'; contFin.style.display = 'block'; contDias.style.display = 'block';
         document.getElementById('det-fecha-fin').textContent = data.fecha_fin_h;
         document.getElementById('det-dias').textContent = `${data.cantidad_dias} día(s) hábil(es)`;
-    }
-
-//este boton sirve para generar el archivo pdf si la solicitud es valida
-    const btnPDF = document.getElementById('btn-descargar-pdf');
-    if (btnPDF) {
-//el archivo solo se puede bajar si el jefe ya aprobo la solicitud
-        if (data.estado === 'Aprobado') {
-            btnPDF.style.display = 'block';
-            btnPDF.onclick = async () => {
-//ponemos un icono de carga mientras se fabrica el documento
-                const textOrigin = btnPDF.innerHTML;
-                btnPDF.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Generando...';
-                btnPDF.disabled = true;
-
-                try {
-//juntamos toda la info del docente para meterla al reporte
-                    const docenteInfo = {
-                        nombre_completo: data.nombre_completo,
-                        rfc: data.rfc,
-                        area_adscripcion: data.area_adscripcion,
-                        fecha_ingreso: data.fecha_ingreso,
-                        categoria: data.categoria,
-                        tipo_contrato: data.tipo_contrato,
-                        fecha_nacimiento: data.fecha_nacimiento
-                    };
-//llamamos a la funcion que crea el pdf segun sea el caso
-                    if (esPase) {
-                        await pdfPase(data, docenteInfo);
-                    } else {
-                        await pdfPermiso(data, docenteInfo);
-                    }
-                } catch (e) {
-//si algo falla al hacer el pdf mostramos un error rojo
-                    mostrarToast("Error construyendo PDF", "error");
-                } finally {
-//regresamos el boton a como estaba al principio
-                    btnPDF.innerHTML = textOrigin;
-                    btnPDF.disabled = false;
-                }
-            };
-        } else {
-//si no esta aprobado escondemos el boton de descarga
-            btnPDF.style.display = 'none';
-        }
     }
 
 //actualizamos los textos de los distintivos de estado y tipo

@@ -1,5 +1,6 @@
 const pool = require('../bd/base');
 const reglas = require('./reglas');
+const historial = require('../documentos/historial');
 const tablas = { pase: 'pases_salida', permiso: 'permisos_goce' };
 
 async function conUsuario(id, work) {
@@ -71,9 +72,11 @@ async function guardar(tipo, body, actor, id = null, administrativo = false) {
             const [result] = await connection.execute(`UPDATE ${tabla} SET ${keys.map(k => `${k}=?`).join(',')}${administrativo ? ',estado=?' : ''} WHERE id=? AND usuario_id=? AND estado=?`,
                 [...Object.values(values), ...(administrativo ? [estado] : []), id, owner, previo.estado]);
             if (!result.affectedRows) reglas.fallo('El trámite cambió. Actualiza la pantalla.', 409);
+            await historial.registrar(connection, tipo, id, actor, administrativo ? 'Ajuste administrativo' : 'Edición', previo.estado, previo);
             return { id: Number(id), usuario_id: owner, estado };
         }
         const [result] = await connection.execute(`INSERT INTO ${tabla} (usuario_id,${keys.join(',')}) VALUES (?,${keys.map(() => '?').join(',')})`, [owner, ...Object.values(values)]);
+        await historial.registrar(connection, tipo, result.insertId, actor, 'Solicitud', null);
         return { id: result.insertId, usuario_id: owner, estado };
     });
 }
@@ -89,6 +92,7 @@ async function cambiarEstado(tabla, estado, id, actor, estadoAnterior) {
         const values = { ...previo, fecha_uso: reglas.sqlFecha(previo.fecha_uso), fecha_inicio: reglas.sqlFecha(previo.fecha_inicio) };
         await disponibilidad(connection, row.usuario_id, tipo, values, estado, Number(id));
         const [result] = await connection.execute(`UPDATE ${tabla} SET estado=?,revisado_por=?,fecha_revision=NOW() WHERE id=? AND estado=?`, [estado, actor.id, id, estadoAnterior]);
+        if (result.affectedRows) await historial.registrar(connection, tipo, id, actor, estado, estadoAnterior);
         return result.affectedRows > 0;
     });
 }

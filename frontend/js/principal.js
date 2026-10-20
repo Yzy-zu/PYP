@@ -130,7 +130,6 @@ Seguridad.alCargar(async () => {
         abrirPerfil(false);
     });
 
-    inicializarMotorPDF();
 
     //configuramos el clic para ver seguridad
     document.getElementById('link-seguridad').addEventListener('click', (e) => {
@@ -315,19 +314,7 @@ function verDetallesSolicitud(data) {
     document.getElementById('v-det-tipo').textContent = data.tipoTramite;
     document.getElementById('v-det-motivo').textContent = data.motivo || 'Sin motivo';
 
-//seccion para mostrar quien dio el permiso
-    const contRev = document.getElementById('v-cont-revision');
-    if (data.estado !== 'Pendiente' && data.revisado_por_nombre) {
-        contRev.style.display = 'block';
-        document.getElementById('v-det-revisado-por').textContent = data.revisado_por_nombre;
-
-//formateamos la fecha de cuando lo revisaron
-        const f = new Date(data.fecha_revision);
-        document.getElementById('v-det-fecha-revision').textContent =
-            `${f.toLocaleDateString()} a las ${f.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hrs`;
-    } else {
-        contRev.style.display = 'none';
-    }
+    cargarDocumentoSolicitud(data, 'v-cont-revision');
 
 //cambiamos los textos segun si es pase o permiso
     const labelFecha = document.getElementById('v-label-fecha');
@@ -347,38 +334,6 @@ function verDetallesSolicitud(data) {
         document.getElementById('v-det-fecha-fin').textContent = data.fecha_fin_h;
         document.getElementById('v-det-dias').textContent = `${data.cantidad_dias} día(s)`;
     }
-
-//logica para el boton de descargar el documento
-    const btnPDF = document.getElementById('btn-descargar-pdf');
-    if (btnPDF) {
-//solo dejamos descargar si ya esta aprobado
-        if (data.estado === 'Aprobado') {
-            btnPDF.style.display = 'block';
-            btnPDF.onclick = async () => {
-//ponemos un spinner para que sepan que esta cargando
-                const textOrigin = btnPDF.innerHTML;
-                btnPDF.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Generando...';
-                btnPDF.disabled = true;
-                try {
-//llamamos a la funcion que fabrica el pdf
-                    if (data.tipoTramite === 'Pase') {
-                        await pdfPase(data, usuario);
-                    } else {
-                        await pdfPermiso(data, usuario);
-                    }
-                } catch (e) {
-                    mostrarToast("Error construyendo PDF", "error");
-                } finally {
-//regresamos el boton a su texto original
-                    btnPDF.innerHTML = textOrigin;
-                    btnPDF.disabled = false;
-                }
-            };
-        } else {
-            btnPDF.style.display = 'none';
-        }
-    }
-
 
 //ponemos los colores de los estados con clases de bootstrap
     document.getElementById('v-det-tipo-badge').className = `badge rounded-pill px-3 py-2 ${esPase ? 'bg-info text-dark' : 'bg-primary'}`;

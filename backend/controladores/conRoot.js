@@ -166,9 +166,7 @@ const rootControlador = {
         res.json({ ok: true });
     }),
     eliminarPase: endpoint(async (req, res) => {
-        const [result] = await db.execute('DELETE FROM pases_salida WHERE id = ?', [req.params.id]);
-        if (!result.affectedRows) return res.status(404).json({ ok: false, msg: 'Pase no encontrado' });
-        res.json({ ok: true });
+        res.status(409).json({ ok: false, msg: 'Se conserva el expediente y su historial. Usa el ajuste administrativo para cancelarlo.' });
     }),
     getPermisos: endpoint(async (req, res) => {
         const [data] = await db.query('SELECT * FROM permisos_goce');
@@ -181,9 +179,7 @@ const rootControlador = {
         res.json({ ok: true });
     }),
     eliminarPermiso: endpoint(async (req, res) => {
-        const [result] = await db.execute('DELETE FROM permisos_goce WHERE id = ?', [req.params.id]);
-        if (!result.affectedRows) return res.status(404).json({ ok: false, msg: 'Permiso no encontrado' });
-        res.json({ ok: true });
+        res.status(409).json({ ok: false, msg: 'Se conserva el expediente y su historial. Usa el ajuste administrativo para cancelarlo.' });
     }),
     getDias: endpoint(async (req, res) => {
         const [data] = await db.query('SELECT * FROM dias_festivos');

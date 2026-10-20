@@ -103,7 +103,6 @@
                         <td><input type="text" class="form-control form-control-sm" value="${Seguridad.escapeHTML(p.motivo)}" id="mp_${Number(p.id)}"></td>
                         <td>
                             <button class="btn btn-success btn-xs" onclick="updatePase(${Number(p.id)})">actualizar</button>
-                            <button class="btn btn-danger btn-xs" style="background:#000;" onclick="deletePase(${Number(p.id)})">borrar</button>
                         </td>
                     </tr>`;
                 });
@@ -124,6 +123,7 @@
                                 <option value="Personal" ${p.tipo_permiso==='Personal'?'selected':''}>Personal</option>
                                 <option value="Salud" ${p.tipo_permiso==='Salud'?'selected':''}>Salud</option>
                                 <option value="Institucional" ${p.tipo_permiso==='Institucional'?'selected':''}>Institucional</option>
+                                <option value="Cumpleaños" ${p.tipo_permiso==='Cumpleaños'?'selected':''}>Cumpleaños</option>
                             </select>
                         </td>
                         <td><input type="date" class="form-control form-control-sm" value="${Seguridad.escapeHTML(p.fecha_inicio.split('T')[0])}" id="fip_${Number(p.id)}"></td>
@@ -140,7 +140,6 @@
                         </td>
                         <td>
                             <button class="btn btn-success btn-xs" onclick="updatePermiso(${Number(p.id)})">actualizar</button>
-                            <button class="btn btn-danger btn-xs" style="background:#000;" onclick="deletePermiso(${Number(p.id)})">borrar</button>
                         </td>
                     </tr>`;
                 });
@@ -286,13 +285,6 @@
             if(res.ok) alert('aactualizacion completa');
         }
 
-        async function deletePase(id) {
-            if(confirm('borrar pase?')) {
-                const res = await fReq(`/pases/${id}`, 'DELETE');
-                if(res.ok) cargarPases();
-            }
-        }
-
         async function updatePermiso(id) {
             const payload = {
                 tipo_permiso: document.getElementById(`tper_${id}`).value,
@@ -303,13 +295,6 @@
             };
             const res = await fReq(`/permisos/override/${id}`, 'PATCH', payload);
             if(res.ok) alert('COMMIT SUCCESSFUL');
-        }
-
-        async function deletePermiso(id) {
-            if(confirm('borrar permoso?')) {
-                const res = await fReq(`/permisos/${id}`, 'DELETE');
-                if(res.ok) cargarPermisos();
-            }
         }
 
         const cargarFestivos = async () => {

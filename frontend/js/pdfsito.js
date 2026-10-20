@@ -1,104 +1,134 @@
-//funcion pdf
-async function inicializarMotorPDF() {
-    try {
-        //plantilla del pdf html
-        const respuesta = await fetch('pdfsito.html');
-        const htmlMoldes = await respuesta.text();
-        
-        const contenedor = document.createElement('div');
-        contenedor.id = 'contenedor-moldes-pdf';
-        contenedor.style.position = 'absolute';
-        contenedor.style.left = '-9999px'; 
-        contenedor.innerHTML = htmlMoldes;
-        
-        document.body.appendChild(contenedor);
-    } catch (error) {
-        console.error("error al cargar html:", error);
+// Los documentos se construyen y autorizan en el servidor a partir de la solicitud guardada.
+async function descargarDocumentoSolicitud(tipo, id) {
+    if (!['pase', 'permiso'].includes(tipo) || !Number.isSafeInteger(Number(id)) || Number(id) <= 0) {
+        throw new Error('Solicitud inválida.');
     }
+    const respuesta = await fetch(`/api/documentos/${tipo}/${encodeURIComponent(id)}/pdf`, {
+        headers: { 'x-token': sessionStorage.getItem('token') || '' },
+        cache: 'no-store'
+    });
+    if (!respuesta.ok) {
+        const error = await respuesta.json().catch(() => ({}));
+        throw new Error(error.msg || 'No se pudo descargar el documento autorizado.');
+    }
+    if (!respuesta.headers.get('content-type')?.includes('application/pdf')) {
+        throw new Error('El servidor no entregó un documento PDF.');
+    }
+    const archivo = await respuesta.blob();
+    const enlace = URL.createObjectURL(archivo);
+    const link = document.createElement('a');
+    link.href = enlace;
+    link.download = `${tipo === 'pase' ? 'PASE' : 'PERM'}-${String(id).padStart(8, '0')}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(enlace), 1000);
 }
-const escribirTexto = (id, valor) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = valor;
-};
 
+// Se conservan las firmas usadas por las pantallas; los datos y nombres del cliente no crean el PDF.
 async function pdfPase(datosPase, usuario) {
-    const { jsPDF } = window.jspdf;
-    const u = usuario;
-    
-    const hoy = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-    //formato exacto html
-    escribirTexto('pdf-folio', datosPase.id.toString().padStart(4, '0'));
-    escribirTexto('pdf-fecha-hoy', hoy);
-    escribirTexto('pdf-dia-solicitud', datosPase.fecha_uso_h);
-    escribirTexto('pdf-hora-inicio', datosPase.hora_inicio.substring(0, 5));
-    escribirTexto('pdf-hora-fin', datosPase.hora_fin.substring(0, 5));
-    escribirTexto('pdf-nombre-personal', u.nombre_completo);
-    escribirTexto('pdf-motivo-texto', datosPase.motivo || 'COMISIÓN / PERSONAL');
-    //firma
-    escribirTexto('val-firma-vo-bo', datosPase.revisado_por_nombre || "AUTORIZADO DIGITAL");
-console.log("DATOS QUE LLEGAN AL PDF:", datosPase);
-    const elemento = document.getElementById('molde-pase-salida');
-    const canvas = await html2canvas(elemento, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-    
-    const imgData = canvas.toDataURL('image/jpeg', 0.8);
-    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [216, 140] });
-    pdf.addImage(imgData, 'JPEG', 5, 5, 206, 0, undefined, 'FAST');
-    pdf.save(`Pase_${datosPase.id}_${u.nombre_completo.split(' ')[0]}.pdf`);
+    return descargarDocumentoSolicitud('pase', datosPase.id);
 }
 
 async function pdfPermiso(datos, usuario) {
-    const { jsPDF } = window.jspdf;
-    const u = usuario;
+    return descargarDocumentoSolicitud('permiso', datos.id);
+}
 
-    //seleccion 
-    ['check-economico', 'check-sin-goce', 'check-con-goce', 'check-cumple'].forEach(id => {
-        escribirTexto(id, '');
-    });
+function fechaRevisionDocumento(valor) {
+    const fecha = new Date(valor);
+    return valor && !Number.isNaN(fecha.getTime())
+        ? fecha.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', dateStyle: 'medium', timeStyle: 'short' })
+        : 'Fecha no registrada';
+}
 
-    const mesDiaPermiso = datos.fecha_inicio.substring(5, 10);
-    const mesDiaCumple = u.fecha_nacimiento ? u.fecha_nacimiento.substring(5, 10) : 'XX-XX';
-    
-    if (mesDiaPermiso === mesDiaCumple) {
-        escribirTexto('check-cumple', 'X');
-    } else if (datos.tipo_permiso === 'Personal') {
-        escribirTexto('check-economico', 'X');
-    } else if (datos.tipo_permiso === 'Salud') {
-        escribirTexto('check-con-goce', 'X');
+// Cada modal consulta su evidencia al abrirse. Una respuesta tardía no reemplaza otra solicitud.
+async function cargarDocumentoSolicitud(datos, idContenedor) {
+    const contenedor = document.getElementById(idContenedor);
+    const boton = document.getElementById('btn-descargar-pdf');
+    if (!contenedor || !boton) return;
+    const consulta = Symbol('documento');
+    contenedor.consultaDocumento = consulta;
+    boton.consultaDocumento = consulta;
+    contenedor.style.display = 'block';
+    contenedor.textContent = 'Cargando historial de revisión…';
+    boton.style.display = 'none';
+    boton.disabled = true;
+    boton.onclick = null;
+    boton.textContent = 'Descargar PDF';
+    const tipo = datos.tipoTramite === 'Pase' ? 'pase' : 'permiso';
+    try {
+        const respuesta = await fetch(`/api/documentos/${tipo}/${encodeURIComponent(datos.id)}`, {
+            headers: { 'x-token': sessionStorage.getItem('token') || '' }, cache: 'no-store'
+        });
+        const resultado = await respuesta.json();
+        if (!respuesta.ok || !resultado.ok) throw new Error(resultado.msg || 'No se pudo cargar el historial de revisión.');
+        if (contenedor.consultaDocumento !== consulta) return;
+        const documento = resultado.data;
+        contenedor.textContent = '';
+        const titulo = document.createElement('h6');
+        titulo.className = 'fw-bold mb-2';
+        titulo.textContent = 'Historial de revisión';
+        contenedor.appendChild(titulo);
+        if (documento.folio) {
+            const folio = document.createElement('p');
+            folio.className = 'small mb-2';
+            folio.textContent = `Folio: ${documento.folio}`;
+            contenedor.appendChild(folio);
+        }
+        const historial = Array.isArray(documento.historial) ? documento.historial : [];
+        if (historial.length) {
+            const lista = document.createElement('ol');
+            lista.className = 'small mb-2 ps-3';
+            historial.forEach(revision => {
+                const item = document.createElement('li');
+                item.className = 'mb-2';
+                const accion = document.createElement('strong');
+                accion.textContent = `${revision.accion || revision.estado_nuevo || 'Registro'} · ${revision.actor_nombre || 'Autor no registrado'}${revision.actor_rol ? ` (${revision.actor_rol})` : ''}`;
+                const detalle = document.createElement('div');
+                detalle.textContent = `${fechaRevisionDocumento(revision.fecha)} · ${revision.estado_anterior || 'Sin estado anterior'} → ${revision.estado_nuevo || 'Sin estado registrado'}`;
+                item.append(accion, detalle);
+                if (revision.origen) {
+                    const origen = document.createElement('div');
+                    origen.className = 'text-muted';
+                    origen.textContent = `Origen: ${revision.origen}`;
+                    item.appendChild(origen);
+                }
+                lista.appendChild(item);
+            });
+            contenedor.appendChild(lista);
+        } else {
+            const aviso = document.createElement('p');
+            aviso.className = 'small mb-2';
+            aviso.textContent = 'No hay revisiones registradas con evidencia. El estado histórico por sí solo no acredita las aprobaciones.';
+            contenedor.appendChild(aviso);
+        }
+        const disponible = datos.estado === 'Aprobado' && documento.documento_disponible === true;
+        if (!disponible) {
+            const aviso = document.createElement('p');
+            aviso.className = 'small text-muted mb-0';
+            aviso.textContent = 'Documento no disponible para esta solicitud o perfil.';
+            contenedor.appendChild(aviso);
+            return;
+        }
+        boton.style.display = 'block';
+        boton.disabled = false;
+        boton.onclick = async () => {
+            boton.disabled = true;
+            boton.textContent = 'Descargando…';
+            try {
+                if (tipo === 'pase') await pdfPase(datos);
+                else await pdfPermiso(datos);
+            } catch (error) {
+                if (boton.consultaDocumento === consulta) mostrarToast(error.message || 'No se pudo descargar el PDF.', 'error');
+            } finally {
+                if (boton.consultaDocumento === consulta) {
+                    boton.disabled = false;
+                    boton.textContent = 'Descargar PDF';
+                }
+            }
+        };
+    } catch (error) {
+        if (contenedor.consultaDocumento !== consulta) return;
+        contenedor.textContent = error.message || 'No se pudo cargar el historial de revisión.';
     }
-
-    //datos rh y docente
-    escribirTexto('p-pdf-rector', window.CONFIG_SISTEMA?.rector || 'Rector General');
-    escribirTexto('p-pdf-nombre-titulo', u.nombre_completo);
-    escribirTexto('p-pdf-dias', datos.cantidad_dias.toString().padStart(2, '0'));
-    escribirTexto('p-pdf-rango-fechas', `${datos.fecha_inicio_h} al ${datos.fecha_fin_h}`);
-    escribirTexto('p-pdf-firma-trabajador', u.nombre_completo);
-    escribirTexto('pdf-jefe-inmediato-nombre', datos.revisado_por_nombre || "VALIDACIÓN ELECTRÓNICA");
-
-    escribirTexto('rh-fecha-ingreso', u.fecha_ingreso ? u.fecha_ingreso.split('T')[0] : 'S/N');
-    escribirTexto('rh-area', u.area_adscripcion);
-    escribirTexto('rh-categoria', u.categoria);
-    escribirTexto('rh-cuatrimestre', window.CONFIG_SISTEMA?.cuatrimestre_actual || 'Actual');
-    escribirTexto('rh-contrato', u.tipo_contrato);
-    escribirTexto('rh-rfc', u.rfc);
-
-    const recepInfo = document.getElementById('rh-recepcion-info');
-    if (recepInfo && datos.fecha_revision) {
-        const f = new Date(datos.fecha_revision);
-        const fFmt = f.toLocaleDateString('es-MX');
-        const hFmt = f.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true });
-        recepInfo.innerHTML = `<span style="font-size: 6pt; font-weight: normal;">FECHA Y HORA DE RECEPCIÓN</span><br>${fFmt}<br>${hFmt}`;
-    }
-
-    //directivos
-    escribirTexto('p-pdf-jefe-rh', window.CONFIG_SISTEMA?.jefe_rh || 'Jefatura RH');
-    escribirTexto('p-pdf-delegada', window.CONFIG_SISTEMA?.delegada_admin || 'Delegación Admin');
-console.log("DATOS QUE LLEGAN AL PDF:", datos);
-    const elemento = document.getElementById('molde-permiso-inasistencia');
-    const canvas = await html2canvas(elemento, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-    
-    const imgData = canvas.toDataURL('image/jpeg', 0.7);
-    const pdf = new jsPDF('p', 'mm', 'letter');
-    pdf.addImage(imgData, 'JPEG', 0, 0, 215.9, 279.4, undefined, 'FAST');
-    pdf.save(`Permiso_${u.nombre_completo.replace(/ /g, '_')}.pdf`);
 }

@@ -60,6 +60,7 @@ app.use('/api/login', rutasLogin);
 app.use('/api/permisos', rutasPermisos);
 app.use('/api/pases', rutasPases); 
 app.use('/api/root', rutaRoot);
+app.use('/api/documentos', require('./rutas/rutaDocumentos'));
 
 app.get('/api/salud', async (req, res) => {
     try {

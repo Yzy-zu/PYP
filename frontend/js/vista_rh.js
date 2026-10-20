@@ -59,7 +59,6 @@ Seguridad.alCargar(() => {
     modalDetalleRH = new bootstrap.Modal(document.getElementById('modalDetalleRH'));
     document.getElementById('saludo-rh').textContent = `RH: ${usuario.nombre_completo}` || "RRHH";
 
-    inicializarMotorPDF();
 
 //configuramos el boton para salir de la cuenta
     document.getElementById('btn-logout').addEventListener('click', () => {
@@ -330,18 +329,7 @@ function verDetallesRRHH(data) {
     const contHoras = document.getElementById('det-rh-cont-horas');
     const contFin = document.getElementById('det-rh-cont-fin');
     const contDias = document.getElementById('det-rh-cont-dias');
-    const contRev = document.getElementById('det-rh-cont-revision');
-
-//si alguien ya lo reviso mostramos quien fue y a que hora
-    if (data.estado !== 'Pendiente' && data.revisado_por_nombre) {
-        contRev.style.display = 'block';
-        document.getElementById('det-rh-revisado-por').textContent = data.revisado_por_nombre;
-        const f = new Date(data.fecha_revision);
-        document.getElementById('det-rh-fecha-revision').textContent = `${f.toLocaleDateString()} a las ${f.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hrs`;
-    } else {
-//si nadie lo ha visto escondemos la parte de la revision
-        contRev.style.display = 'none';
-    }
+    cargarDocumentoSolicitud(data, 'det-rh-cont-revision');
 
 //si es pase mostramos las horas y la fecha de uso
     if (esPase) {
@@ -356,30 +344,6 @@ function verDetallesRRHH(data) {
         contHoras.style.display = 'none'; contFin.style.display = 'block'; contDias.style.display = 'block';
         document.getElementById('det-rh-fecha-fin').textContent = data.fecha_fin_h;
         document.getElementById('det-rh-dias').textContent = `${data.cantidad_dias} día(s) hábiles`;
-    }
-
-//configuramos el boton para bajar el reporte en pdf
-    const btnPDF = document.getElementById('btn-descargar-pdf');
-    if (btnPDF) {
-//solo dejamos bajar el archivo si el tramite ya esta aprobado
-        if (data.estado === 'Aprobado') {
-            btnPDF.style.display = 'block';
-            btnPDF.onclick = async () => {
-//ponemos un circulito cargando mientras se hace el pdf
-                const textOrigin = btnPDF.innerHTML;
-                btnPDF.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i> Generando...';
-                btnPDF.disabled = true;
-                try {
-//llamamos a la funcion que crea el pdf de pases o de permisos
-                    if (esPase) await pdfPase(data, data);
-                    else await pdfPermiso(data, data);
-                } catch(e) { console.error(e); mostrarToast("Error PDF", "error"); }
-                finally { btnPDF.innerHTML = textOrigin; btnPDF.disabled = false; }
-            };
-        } else {
-//si no esta aprobado el boton no aparece
-            btnPDF.style.display = 'none';
-        }
     }
 
 //ponemos el color y el nombre del tipo de tramite en el distintivo
