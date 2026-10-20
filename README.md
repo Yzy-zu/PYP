@@ -63,7 +63,7 @@ El dump necesita un cliente compatible con `DELIMITER`; la herramienta utiliza e
 
 ## Alcance actual
 
-Fases 1 a 5: recuperación, arranque, controles básicos de seguridad, reglas de solicitudes, historial, PDF, calendarios con intervalos, autorización por selección e informe de RH. La demo usa datos ficticios y acceso local o por Tailscale. El ensayo completo y las instrucciones finales de presentación corresponden a la fase 6.
+Fases 1 a 6 completadas para la demostración: recuperación, arranque, controles básicos de seguridad, reglas, historial, PDF, calendarios, autorización por selección, informe de RH, ensayo y respaldo con restauración aislada comprobada. La demo usa datos ficticios y acceso local o por Tailscale. Empezar por [ENTREGA_Y_DEMO.md](ENTREGA_Y_DEMO.md).
 
 ## Seguridad de fase 2
 
@@ -141,3 +141,15 @@ Cada decisión conserva su propia transacción e historial. El lote puede termin
 El [informe de RH](frontend/informeRH.html) comparte filtros de mes de uso/inicio, tipo y estado entre métricas, tablas y CSV. Separa días de permisos aprobados, horas de pases aprobados y solicitudes con Vo.Bo. La tasa es aprobados / (aprobados + rechazados). Las coincidencias por área son alertas de solicitudes con horarios superpuestos, no registros de asistencia ni cálculos de nómina.
 
 El acceso público dirige al login. Las páginas de registro anteriores explican que las cuentas se crean desde administración. Credenciales locales en [.local/ACCESOS_DEMO.md](.local/ACCESOS_DEMO.md); la carpeta `.local` está oculta y excluida de Git. Ver [FASE_5_PANTALLAS.md](FASE_5_PANTALLAS.md) para pruebas y alcance.
+
+## Respaldo y cierre de fase 6
+
+Con la BD iniciada y sin solicitudes en curso:
+
+```sh
+npm run db:backup
+```
+
+El comando guarda `demo.sql`, `config.env`, las credenciales locales y un manifiesto con SHA-256 en una carpeta privada `backups/demo-.../`, excluida de Git. Importa el SQL en una base temporal, compara estructura y conteos con la demo, elimina solamente esa base temporal y marca el manifiesto como verificado. No reemplaza la BD de trabajo ni el respaldo original. Si hay escrituras concurrentes, puede fallar la comparación; repetir sin actividad.
+
+La copia contiene contraseñas y expedientes: conservarla de forma privada y copiarla fuera de este equipo. `setup:local` no importa este respaldo de trabajo ni recupera movimientos posteriores al SQL original. Ver [ENTREGA_Y_DEMO.md](ENTREGA_Y_DEMO.md) para recuperación y recorrido de presentación.

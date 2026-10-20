@@ -49,6 +49,59 @@ function tableCount(container, database) {
     const result = sql(container, null, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${database}';`);
     return Number(result.trim().split('\n').at(-1));
 }
+function estadoRespaldo(container, database) {
+    const name = identifier(database);
+    const rows = sql(container, database, `SELECT
+        (SELECT COUNT(*) FROM usuarios) usuarios,
+        (SELECT COUNT(*) FROM pases_salida) pases,
+        (SELECT COUNT(*) FROM permisos_goce) permisos,
+        (SELECT COUNT(*) FROM dias_festivos) festivos,
+        (SELECT COUNT(*) FROM revisiones_tramites) revisiones,
+        (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${database}') tablas,
+        (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='${database}') triggers,
+        (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA='${database}' AND CONSTRAINT_TYPE='FOREIGN KEY') claves,
+        (SELECT COUNT(*) FROM (SELECT TABLE_NAME,INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='${database}' GROUP BY TABLE_NAME,INDEX_NAME) i) indices;`);
+    const lines = rows.trim().split('\n');
+    const keys = lines.at(-2).split('\t');
+    const values = lines.at(-1).split('\t').map(Number);
+    if (values.some(v => !Number.isFinite(v)) || values.length !== 9) throw new Error(`No se pudo verificar ${name}.`);
+    return Object.fromEntries(keys.map((key, i) => [key, values[i]]));
+}
+function backup(container, demo) {
+    if (!/_demo(?:$|_)/i.test(demo)) throw new Error('El respaldo automático requiere una BD demo.');
+    const created = new Date().toISOString();
+    const destination = path.join(root, 'backups', `demo-${created.replace(/[:.]/g, '-')}-${crypto.randomBytes(3).toString('hex')}`);
+    fs.mkdirSync(destination, { recursive: true, mode: 0o700 });
+    const dump = docker(['exec', container, 'sh', '-c',
+        'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump -uroot --default-character-set=utf8mb4 --single-transaction --triggers --routines --events --hex-blob "$1"', 'sh', demo]);
+    const dumpFile = path.join(destination, 'demo.sql');
+    fs.writeFileSync(dumpFile, dump, { mode: 0o600 });
+    fs.copyFileSync(envPath, path.join(destination, 'config.env'));
+    fs.chmodSync(path.join(destination, 'config.env'), 0o600);
+    const accounts = path.join(stateDir, 'ACCESOS_DEMO.md');
+    if (fs.existsSync(accounts)) {
+        fs.copyFileSync(accounts, path.join(destination, 'ACCESOS_DEMO.md'));
+        fs.chmodSync(path.join(destination, 'ACCESOS_DEMO.md'), 0o600);
+    }
+    const temporary = `pases_restore_check_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    let verified;
+    try {
+        sql(container, null, `CREATE DATABASE ${identifier(temporary)} CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;`);
+        sql(container, temporary, dump);
+        verified = estadoRespaldo(container, temporary);
+        if (JSON.stringify(verified) !== JSON.stringify(estadoRespaldo(container, demo))) {
+            throw new Error('La restauración no coincide con la demo; evita escrituras mientras ejecutas el respaldo y vuelve a intentar.');
+        }
+        fs.writeFileSync(path.join(destination, 'manifest.json'), JSON.stringify({
+            created, database: demo, sha256: crypto.createHash('sha256').update(dump).digest('hex'),
+            restoredAndVerified: true, counts: verified
+        }, null, 2) + '\n', { mode: 0o600 });
+    } finally {
+        sql(container, null, `DROP DATABASE IF EXISTS ${identifier(temporary)};`);
+    }
+    console.log(`Respaldo creado y restauración aislada verificada: ${path.relative(root, destination)}`);
+    console.log('Incluye demo.sql, configuración y accesos locales. Guarda una copia privada fuera de este equipo.');
+}
 function migraciones(container, demo) {
     sql(container, demo, fs.readFileSync(path.join(root, 'backend/bd/migraciones/002_seguridad.sql'), 'utf8'));
     const triggers = sql(container, null, `SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA='${demo}'
@@ -158,7 +211,7 @@ function verify(container, demo) {
 }
 
 async function main() {
-    if (!['setup', 'up', 'verify', 'stop'].includes(action)) throw new Error('Acción: setup, up, verify o stop.');
+    if (!['setup', 'up', 'verify', 'stop', 'backup'].includes(action)) throw new Error('Acción: setup, up, verify, stop o backup.');
     fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
     if (action === 'setup') makeEnv();
     const config = require('../config/env');
@@ -175,6 +228,7 @@ async function main() {
     }
     const container = compose(['ps', '-q', 'db']).trim();
     if (!container) throw new Error('No está disponible el contenedor local. Ejecuta npm run db:up.');
+    if (action === 'backup') { verify(container, demo); backup(container, demo); return; }
     if (action === 'up') {
         if (![4, 5].includes(tableCount(container, demo))) throw new Error('Ejecuta npm run setup:local antes de iniciar.');
         migraciones(container, demo);
