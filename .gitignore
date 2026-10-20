@@ -4,6 +4,13 @@ dist/
 
 #Variables de entorno (Contraseñas)
 .env
+.env.*
+!.env.example
+.local/
+backups/
+
+# El respaldo recibido contiene datos personales y hashes.
+/sistema_permisos_salidas final.sql
 
 #Archivos de sistema
 .DS_Store

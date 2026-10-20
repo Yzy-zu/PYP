@@ -1,4 +1,4 @@
-require('dotenv').config();
+const config = require('./config/env');
 const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
@@ -42,6 +42,15 @@ app.use('/api/permisos', rutasPermisos);
 app.use('/api/pases', rutasPases); 
 app.use('/api/root', rutaRoot);
 
+app.get('/api/salud', async (req, res) => {
+    try {
+        await db.query('SELECT 1');
+        res.json({ ok: true, database: 'ready', email: config.emailEnabled ? 'enabled' : 'disabled' });
+    } catch {
+        res.status(503).json({ ok: false, database: 'unavailable' });
+    }
+});
+
 app.get('/api/dias/ver', async (req, res) => {
     try {
         const [rows] = await db.execute("SELECT fecha, descripcion FROM dias_festivos");
@@ -51,8 +60,28 @@ app.get('/api/dias/ver', async (req, res) => {
     }
 });
 
-//puerto que usaremos
-const PORT = process.env.PORT
-server.listen(PORT,'0.0.0.0', () => {
-    console.log(`Servidor listo en http://localhost:${PORT}`);
-});
+async function iniciar() {
+    await db.query('SELECT 1');
+    await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(config.port, config.host, resolve);
+    });
+    console.log(`Servidor listo en http://${config.host}:${config.port}`);
+    console.log(`Base de datos conectada. Correo ${config.emailEnabled ? 'habilitado' : 'desactivado'}.`);
+}
+
+function cerrar() {
+    io.close(() => db.end().then(() => process.exit(0)));
+}
+
+if (require.main === module) {
+    iniciar().catch(async (error) => {
+        console.error(`No se pudo iniciar: ${error.code || 'error de configuración'}. Revisa la BD y el puerto.`);
+        await db.end();
+        process.exit(1);
+    });
+    process.once('SIGINT', cerrar);
+    process.once('SIGTERM', cerrar);
+}
+
+module.exports = { app, server, iniciar };

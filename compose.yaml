@@ -1,0 +1,22 @@
+name: proyecto-pases-local
+services:
+  db:
+    image: mariadb:10.4.32
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Ejecuta npm run setup:local}
+      MYSQL_DATABASE: ${DB_NAME:-sistema_permisos_demo}
+      MYSQL_USER: ${DB_USER:-pases_demo}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Ejecuta npm run setup:local}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${DB_PORT:-33307}:3306"
+    volumes:
+      - datos:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql --protocol=tcp -h127.0.0.1 -uroot -Nse 'SELECT 1' >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+volumes:
+  datos:

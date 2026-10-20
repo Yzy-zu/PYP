@@ -1,13 +1,14 @@
 const nodemailer = require('nodemailer');
+const { emailEnabled } = require('../config/env');
 
 //servicios de correo
-const transporter = nodemailer.createTransport({
+const transporter = emailEnabled ? nodemailer.createTransport({
     service: 'gmail',
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     }
-});
+}) : null;
 
 /**
  * Función universal para enviar correos
@@ -17,6 +18,10 @@ const transporter = nodemailer.createTransport({
  * @param {string} estado - 'Aprobado' o 'Rechazado'
  */
 const enviarNotificacionEstado = async (emailDestino, nombreDocente, tramite, estado) => {
+    if (!emailEnabled) {
+        console.log('[correo] Envío omitido: EMAIL_ENABLED=false');
+        return { enviado: false, desactivado: true };
+    }
     const colorEstado = estado === 'Aprobado' ? '#198754' : '#dc3545';
 
     const mailOptions = {

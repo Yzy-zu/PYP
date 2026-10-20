@@ -1,0 +1,14 @@
+{
+  "name": "pases-utm",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "dev": "npm --prefix backend run dev",
+    "setup:local": "node backend/scripts/local-db.js setup",
+    "db:up": "node backend/scripts/local-db.js up",
+    "db:verify": "node backend/scripts/local-db.js verify",
+    "db:stop": "node backend/scripts/local-db.js stop"
+  }
+}
