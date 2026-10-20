@@ -17,7 +17,7 @@ Abrir **http://127.0.0.1:3100**. Las cuentas y contraseñas generadas están en 
 La preparación genera `.env` con secretos aleatorios, inicia únicamente el servicio de BD de este proyecto y restaura dos bases:
 
 - `sistema_permisos_respaldo`: copia original con 39 usuarios, 2 pases, 65 permisos y 9 festivos. Accesible solo con la cuenta root del contenedor.
-- `sistema_permisos_demo`: misma estructura y triggers, 9 festivos, 4 cuentas ficticias (dos docentes, jefe y RH), 2 pases y 3 permisos de ejemplo. El servidor usa exclusivamente esta base con un usuario independiente.
+- `sistema_permisos_demo`: estructura del respaldo con las migraciones de seguridad y reglas, 9 festivos, 4 cuentas ficticias (dos docentes, jefe y RH), 2 pases y 3 permisos de ejemplo. El servidor usa exclusivamente esta base con un usuario independiente.
 
 `setup:local` conserva las bases y las credenciales cuando ya existen; no borra ni reinicia expedientes. Una restauración incompleta se considera un error y requiere revisión. El original SQL permanece intacto y está excluido de Git por sus datos personales y hashes.
 
@@ -45,11 +45,11 @@ Ver [.env.example](.env.example). El servidor carga `.env` desde la raíz, inclu
 
 El correo está **desactivado por defecto** (`EMAIL_ENABLED=false`): no se crea transporte SMTP ni se envían mensajes. Activarlo requiere `EMAIL_ENABLED=true`, `EMAIL_USER` y `EMAIL_PASS`; durante la demo debe permanecer desactivado.
 
-El dump necesita un cliente compatible con `DELIMITER`; la herramienta utiliza el cliente del contenedor y verifica cuatro tablas, tres triggers, cuatro claves foráneas y nueve índices en cada base. Para verificación manual, evitar imprimir filas de usuarios, contraseñas, hashes o motivos personales.
+El dump necesita un cliente compatible con `DELIMITER`; la herramienta utiliza el cliente del contenedor. Verifica cuatro tablas y cuatro claves foráneas en ambas bases: el respaldo conserva tres triggers y nueve índices; la demo tiene cuatro triggers de reglas y once índices. Para verificación manual, evitar imprimir filas de usuarios, contraseñas, hashes o motivos personales.
 
 ## Alcance actual
 
-Fases 1 y 2: recuperación, arranque y controles básicos de seguridad. Mantener la demo en localhost con datos ficticios mientras se completan las reglas y los documentos. Los cupos/cumpleaños y el historial de ambas revisiones siguen pendientes en las fases siguientes. La restauración conserva los triggers originales.
+Fases 1 a 3: recuperación, arranque, controles básicos de seguridad y reglas de solicitudes. Mantener la demo en localhost con datos ficticios mientras se completan los documentos y las pantallas pendientes. El historial de ambas revisiones y el PDF respaldado por el servidor corresponden a la fase 4; calendario de intervalos, métricas y otras funciones pendientes, a la fase 5.
 
 ## Seguridad de fase 2
 
@@ -77,3 +77,23 @@ npm run check:security
 ```
 
 Ese comando crea fixtures ficticios, comprueba accesos/sesiones/estados y los elimina al terminar. Se niega a ejecutarse contra una base distinta de `_demo`, una API remota o con correo habilitado. Ver [FASE_2_SEGURIDAD.md](FASE_2_SEGURIDAD.md) para resultados y límites.
+
+## Reglas de fase 3
+
+`setup:local` y `db:up` también aplican [003_reglas.sql](backend/bd/migraciones/003_reglas.sql) solamente a la demo. El SQL recibido y la base de respaldo conservan su contenido original.
+
+- Tres pases por mes de uso, de hasta tres horas entre 07:00 y 20:00.
+- Tres permisos ordinarios por cuatrimestre, cada uno de un día completo. Periodos: enero–abril, mayo–agosto y septiembre–diciembre.
+- Un permiso adicional de cumpleaños por año, de un día completo, exactamente en la fecha registrada. Si cae en sábado, domingo o festivo registrado, no se solicita ni se traslada.
+- Pendiente, Vo.Bo. y Aprobado reservan cupo; Rechazado y Cancelado lo liberan. Un docente solo puede tener un trámite activo por fecha.
+- Creación y edición validan fechas, días hábiles, horarios y cupos en el servidor. Los contadores usan el periodo de la fecha elegida. El servidor calcula siempre un día por permiso.
+
+Con servidor y demo activos, ejecutar las comprobaciones de forma consecutiva:
+
+```sh
+npm run check:security
+npm run check:business
+npm run db:verify
+```
+
+La segunda suite comprueba reglas y solicitudes simultáneas con datos ficticios propios que elimina al terminar. Ver [FASE_3_REGLAS.md](FASE_3_REGLAS.md) para decisiones, resultados y límites.

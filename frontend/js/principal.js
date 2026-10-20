@@ -21,7 +21,41 @@ let urlPendiente = null;
 //metodo que quedo a la espera
 let metodoPendiente = null;
 //lista de dias feriados o libres
-let festivosGlobales = []; //
+let festivosGlobales = [];
+// El servidor fija el día escolar; el navegador puede estar en otra zona horaria.
+let configNegocio = {
+    hoy: new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+    maxDiasPermiso: 1,
+    cumpleanosInhabil: false
+};
+let fechaPresupuestoSeleccionada = null;
+let consultaPresupuesto = 0;
+
+function fechaLocal(fecha) {
+    return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+}
+
+function esDiaLaborable(fechaStr) {
+    const dia = parseLocal(fechaStr).getDay();
+    return dia !== 0 && dia !== 6 && !festivosGlobales.some(f => f.fecha.split('T')[0] === fechaStr);
+}
+
+function esFechaCumpleanos(fechaStr) {
+    return Boolean(usuario.fecha_nacimiento && fechaStr.substring(5, 10) === usuario.fecha_nacimiento.substring(5, 10));
+}
+
+function esPermisoCumpleanos() {
+    return document.getElementById('tipo_permiso').value === 'Cumpleaños';
+}
+
+async function cargarConfiguracionNegocio() {
+    try {
+        const resp = await fetch(`${URL_BASE}/negocio/config`, { headers: { 'x-token': token } });
+        const data = await resp.json();
+        if (data.ok) configNegocio = { ...configNegocio, ...data };
+    } catch (_) { mostrarToast('No se pudo cargar la configuración. El servidor validará la solicitud.', 'info'); }
+}
+
 
 //sacamos la llave de seguridad de la sesion
 const token = sessionStorage.getItem('token');
@@ -80,7 +114,8 @@ function actualizarBadges(registros) {
 }
 
 //cuando la pagina ya cargo todo esto arranca
-Seguridad.alCargar(() => {
+Seguridad.alCargar(async () => {
+    await cargarConfiguracionNegocio();
     //creamos las ventanas modales de bootstrap
     modalInstancia = new bootstrap.Modal(document.getElementById('modalSolicitud'));
     modalSemanaFABInstancia = new bootstrap.Modal(document.getElementById('modalSemanaFAB'));
@@ -133,7 +168,7 @@ Seguridad.alCargar(() => {
         }
     });
     //sacamos la fecha de hoy para bloquear el calendario
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = configNegocio.hoy;
 
     //campos donde se eligen las fechas
     const inputFechaPase = document.getElementById('fecha_uso');
@@ -170,9 +205,16 @@ Seguridad.alCargar(() => {
         document.getElementById('fecha_inicio').addEventListener('change', () => {
             actualizarLimitesFechaFin();
             calcularDiasPermiso();
+            actualizarPresupuestoSalidas(document.getElementById('fecha_inicio').value);
         });
         document.getElementById('fecha_fin').addEventListener('change', calcularDiasPermiso);
     }
+
+    document.getElementById('tipo_permiso').addEventListener('change', () => {
+        actualizarLimitesFechaFin();
+        calcularDiasPermiso();
+    });
+    inputFechaPase.addEventListener('change', () => actualizarPresupuestoSalidas(inputFechaPase.value));
 
     //configuramos el boton para cerrar sesion
     document.getElementById('btn-logout').addEventListener('click', () => Seguridad.salir());
@@ -181,12 +223,16 @@ Seguridad.alCargar(() => {
     document.getElementById('btn-elegir-pase').addEventListener('click', () => {
         document.getElementById('step-1-choice').style.display = 'none';
         document.getElementById('form-pedir-pase').style.display = 'block';
+        actualizarPresupuestoSalidas(document.getElementById('fecha_uso').value);
     });
 
     //si elige permiso mostramos ese formulario
     document.getElementById('btn-elegir-permiso').addEventListener('click', () => {
         document.getElementById('step-1-choice').style.display = 'none';
         document.getElementById('form-pedir-permiso').style.display = 'block';
+        actualizarLimitesFechaFin();
+        calcularDiasPermiso();
+        actualizarPresupuestoSalidas(document.getElementById('fecha_inicio').value);
     });
 
     //dibujamos el calendario y traemos los datos de la base
@@ -219,51 +265,47 @@ function volverPaso1() {
 //borramos todo lo que el usuario escribio en los campos
     document.getElementById('form-pedir-pase').reset();
     document.getElementById('form-pedir-permiso').reset();
+    document.getElementById('cantidad_dias').classList.remove('is-invalid');
+    document.querySelector('#form-pedir-permiso button[type="submit"]').disabled = false;
+    document.getElementById('aviso-permiso').textContent = '';
+    document.getElementById('aviso-permiso').classList.remove('text-danger');
+    document.getElementById('fecha_fin').readOnly = true;
 }
 
-//sirve para contar solo los dias de lunes a viernes
+// Muestra el cálculo orientativo; el servidor vuelve a calcular los días.
 function calcularDiasPermiso() {
-//agarramos las fechas de los campos de texto
-    const fechaInicioStr = document.getElementById('fecha_inicio').value;
-    const fechaFinStr = document.getElementById('fecha_fin').value;
+    const inicio = document.getElementById('fecha_inicio').value;
+    const fin = document.getElementById('fecha_fin').value;
     const inputDias = document.getElementById('cantidad_dias');
-    const btnSubmit = document.querySelector('#form-pedir-permiso button[type="submit"]');
-
-//si falta una fecha nos salimos de la funcion
-    if (!fechaInicioStr || !fechaFinStr) return;
-
-//convertimos el texto a fechas reales
-    let f1 = parseLocal(fechaInicioStr);
-    let f2 = parseLocal(fechaFinStr);
-
-//validamos que la fecha final no sea antes que la de inicio
-    if (f2 < f1) {
-        mostrarToast("Fecha incorrecta", "error");
-        inputDias.value = 0;
-//bloqueamos el boton para que no envien basura
-        if (btnSubmit) btnSubmit.disabled = true;
-        return;
-    }
-
-    let diasHabiles = 0;
-    let fechaAux = new Date(f1);
-//vamos sumando dia por dia para revisar el calendario
-    while (fechaAux <= f2) {
-//si no es sabado ni domingo lo contamos como dia de trabajo
-        if (fechaAux.getDay() !== 0 && fechaAux.getDay() !== 6) diasHabiles++;
-        fechaAux.setDate(fechaAux.getDate() + 1);
-    }
-
-//ponemos el resultado en el cuadrito de dias
-    inputDias.value = diasHabiles;
-//si son mas de 3 dias no dejamos enviar el formulario
-    btnSubmit.disabled = (diasHabiles > 3 || diasHabiles <= 0);
-    if (diasHabiles > 3) {
-        mostrarToast("Maximo 3 dias permitidos", "error");
-        inputDias.classList.add('is-invalid');
+    const btn = document.querySelector('#form-pedir-permiso button[type="submit"]');
+    const aviso = document.getElementById('aviso-permiso');
+    let error = '';
+    let dias = 0;
+    if (esPermisoCumpleanos()) {
+        const cumple = usuario.fecha_nacimiento ? `${(inicio || configNegocio.hoy).substring(0, 4)}-${usuario.fecha_nacimiento.substring(5, 10)}` : null;
+        aviso.textContent = cumple
+            ? `Cumpleaños: un día completo adicional al año, exactamente el ${cumple}. No consume uno de los 3 permisos del cuatrimestre. Si cae en fin de semana o festivo, no se traslada.`
+            : 'Tu fecha de nacimiento no está registrada. Solicita a RH que la corrija.';
+        dias = inicio && fin && inicio === fin ? 1 : 0;
+        if (!cumple) error = 'No hay fecha de nacimiento registrada.';
+        else if (inicio && (!esFechaCumpleanos(inicio) || inicio !== fin)) error = 'El cumpleaños debe solicitarse por un solo día, exactamente en tu fecha de nacimiento.';
+        else if (inicio && !configNegocio.cumpleanosInhabil && !esDiaLaborable(inicio)) error = 'El cumpleaños debe coincidir con un día laborable.';
     } else {
-        inputDias.classList.remove('is-invalid');
+        aviso.textContent = 'Cada permiso corresponde a un día completo laborable. Tienes 3 permisos ordinarios por cuatrimestre; el cumpleaños es adicional.';
+        if (inicio && fin && inicio === fin) {
+            dias = esDiaLaborable(inicio) ? 1 : 0;
+            if (!dias) error = 'La fecha del permiso debe ser laborable.';
+        }
+        if (dias > configNegocio.maxDiasPermiso) error = `Máximo ${configNegocio.maxDiasPermiso} días hábiles por solicitud.`;
     }
+    if (inicio && fin && inicio !== fin) error = 'Cada permiso debe corresponder a un solo día.';
+    if (inicio && inicio < configNegocio.hoy) error = 'No puedes solicitar días pasados.';
+    inputDias.value = dias;
+    inputDias.classList.toggle('is-invalid', Boolean(error));
+    btn.disabled = Boolean(error) || dias <= 0 || !inicio || !fin;
+    if (error) aviso.textContent += ` ${error}`;
+    aviso.classList.toggle('text-danger', Boolean(error));
+    return !btn.disabled;
 }
 
 //llena la ventana de detalles con la info de la base de datos
@@ -403,7 +445,7 @@ async function cargarDatosYActualizarCalendario() {
 
             //sacamos el dia del cumple del usuario para felicitarlo
             const cumpleMesDia = usuario?.fecha_nacimiento ? usuario.fecha_nacimiento.substring(5, 10) : null;
-            const añoActual = new Date().getFullYear();
+            const añoActual = configNegocio.hoy.substring(0, 4);
 
             //actualizamos la lista de abajo y los contadores de colores
             pintarHistorial(todosLosRegistrosGlobal);
@@ -413,7 +455,7 @@ async function cargarDatosYActualizarCalendario() {
             calendarioOficial.addEventSource(eventosTramites);
             calendarioOficial.addEventSource(eventosFestivos);
 
-            //si hoy cumple años le ponemos un evento especial amarillo
+            //El cumpleaños se marca y permite abrir su solicitud de día adicional.
             if (cumpleMesDia) {
                 const eventoCumple = {
                     title: "Cumpleaños",
@@ -421,10 +463,12 @@ async function cargarDatosYActualizarCalendario() {
                     backgroundColor: '#ffc107',
                     borderColor: '#ffc107',
                     allDay: true,
-                    extendedProps: { esBloqueado: true, msg: "tu cumpleaños" }
+                    extendedProps: { esCumpleanos: true }
                 };
                 calendarioOficial.addEventSource([eventoCumple]);
             }
+            actualizarLimitesFechaFin();
+            actualizarPresupuestoSalidas();
         }
     } catch (e) { mostrarToast("Error de sincronizacion", "error"); }
 }
@@ -437,6 +481,7 @@ function pintarCalendario(eventos) {
     //creamos el calendario nuevo con vista de mes y en español
     calendarioOficial = new FullCalendar.Calendar(document.getElementById('calendario'), {
         initialView: 'dayGridMonth', locale: 'es', height: '100%',
+        initialDate: configNegocio.hoy, now: `${configNegocio.hoy}T12:00:00`,
         events: eventos,
         buttonText: {
             today: 'Hoy',
@@ -467,21 +512,19 @@ function pintarCalendario(eventos) {
 
         //le pone clases de css a los cuadritos de los dias
         dayCellClassNames: (arg) => {
-            const fechaCelda = arg.date.toISOString().split('T')[0];
-            const cumpleMesDia = usuario?.fecha_nacimiento ? usuario.fecha_nacimiento.substring(5, 10) : null;
+            const fechaCelda = fechaLocal(arg.date);
 
             //pone gris los fines de semana
             if (arg.date.getDay() === 0 || arg.date.getDay() === 6) return ['bg-light'];
 
-            //revisa si el dia es feriado o cumple del docente
+            //revisa si el dia es feriado
             const esFestivo = festivosGlobales.some(f => f.fecha.split('T')[0] === fechaCelda);
-            const esCumple = cumpleMesDia && (fechaCelda.substring(5, 10) === cumpleMesDia);
 
             //revisa si el profe ya tiene algo que hacer ese dia
             const diaOcupado = verificarDias(fechaCelda);
 
             //si esta ocupado o es feriado bloqueamos el dia
-            if (esFestivo || esCumple || diaOcupado) {
+            if (esFestivo || diaOcupado) {
                 return ['dia-bloqueado'];
             }
 
@@ -491,9 +534,8 @@ function pintarCalendario(eventos) {
 
         //que pasa cuando le dan clic a un dia vacio
         dateClick: (info) => {
-            const hoyCheck = new Date();
-            hoyCheck.setHours(0, 0, 0, 0);
-            const fechaClick = new Date(info.dateStr + 'T00:00:00');
+            const hoyCheck = parseLocal(configNegocio.hoy);
+            const fechaClick = parseLocal(info.dateStr);
 
             //avisamos que no se puede pedir cosas de dias que ya pasaron
             if (fechaClick < hoyCheck) {
@@ -512,25 +554,41 @@ function pintarCalendario(eventos) {
             }
 
             //si el dia esta libre abrimos el formulario con la fecha ya puesta
-            volverPaso1();
-            document.getElementById('fecha_uso').value = info.dateStr;
-            document.getElementById('fecha_inicio').value = info.dateStr;
-            actualizarLimitesFechaFin();
-            document.getElementById('fecha_fin').value = info.dateStr;
-            calcularDiasPermiso();
-            modalInstancia.show();
+            abrirSolicitudEnFecha(info.dateStr);
         },
 
         //que pasa cuando le dan clic a un tramite ya dibujado
         eventClick: (info) => {
-            //si es un bloqueo de feriado o cumple no hacemos nada
+            if (info.event.extendedProps.esCumpleanos) {
+                const fecha = fechaLocal(info.event.start);
+                if (fecha < configNegocio.hoy || !esDiaLaborable(fecha) || verificarDias(fecha)) {
+                    mostrarToast('Esa fecha no está disponible para una solicitud.', 'info');
+                    return;
+                }
+                abrirSolicitudEnFecha(fecha, true);
+                return;
+            }
             if (info.event.extendedProps.esBloqueado) return;
-            //si es un tramite mostramos toda su informacion
             verDetallesSolicitud(info.event.extendedProps);
         }
     });
-    //dibujamos el calendario por fin
     calendarioOficial.render();
+}
+
+function abrirSolicitudEnFecha(fecha, cumple = false) {
+    volverPaso1();
+    document.getElementById('fecha_uso').value = fecha;
+    document.getElementById('fecha_inicio').value = fecha;
+    document.getElementById('fecha_fin').value = fecha;
+    if (cumple) {
+        document.getElementById('step-1-choice').style.display = 'none';
+        document.getElementById('form-pedir-permiso').style.display = 'block';
+        document.getElementById('tipo_permiso').value = 'Cumpleaños';
+    }
+    actualizarLimitesFechaFin();
+    calcularDiasPermiso();
+    actualizarPresupuestoSalidas(fecha);
+    modalInstancia.show();
 }
 
 //esta funcion dibuja la lista de tramites en el cuadrito de historial
@@ -623,7 +681,9 @@ function prepararEdicion(tipo, id) {
         document.getElementById('cantidad_dias').value = reg.cantidad_dias;
         document.getElementById('motivo').value = reg.motivo;
         actualizarLimitesFechaFin();
+        calcularDiasPermiso();
     }
+    actualizarPresupuestoSalidas(tipo === 'Pase' ? reg.fecha_uso.split('T')[0] : reg.fecha_inicio.split('T')[0]);
     modalInstancia.show();
 }
 
@@ -657,7 +717,7 @@ document.getElementById('form-pedir-pase').addEventListener('submit', (e) => {
     const fechaUso = document.getElementById('fecha_uso').value;
 
 //checa que no tenga otro tramite el mismo dia si es nuevo
-    if (!editandoId && verificarDias(fechaUso)) {
+    if (verificarDias(fechaUso, 'Pase', editandoId)) {
         return mostrarToast("Ya tienes una solicitud activa para esa fecha", "error");
     }
     const hInicio = document.getElementById('hora_inicio').value;
@@ -679,20 +739,21 @@ document.getElementById('form-pedir-permiso').addEventListener('submit', (e) => 
     const tipo = document.getElementById('tipo_permiso').value;
     const fechaI = document.getElementById('fecha_inicio').value;
     const fechaF = document.getElementById('fecha_fin').value;
+    if (!calcularDiasPermiso()) return mostrarToast(document.getElementById('aviso-permiso').textContent, 'error');
 
     let temp = new Date(fechaI + 'T00:00:00');
     const fFinal = new Date(fechaF + 'T00:00:00');
 
 //recorremos los dias para ver si alguno ya esta ocupado
     while (temp <= fFinal) {
-        if (!editandoId && verificarDias(temp.toISOString().split('T')[0])) {
+        if (verificarDias(fechaLocal(temp), 'Permiso', editandoId)) {
             return mostrarToast(`El día ${temp.toLocaleDateString()} ya está ocupado`, "error");
         }
         temp.setDate(temp.getDate() + 1);
     }
-//validamos que no se pase de los 3 dias permitidos por regla
+//validamos que el permiso sea de un día
     const maxD = parseInt(document.getElementById('cantidad_dias').value) || 0;
-    if (maxD > 3 || maxD <= 0) return mostrarToast("Días de permiso excedidos o inválidos", "error");
+    if (maxD > configNegocio.maxDiasPermiso || maxD <= 0) return mostrarToast("Días de permiso excedidos o inválidos", "error");
     const dias = document.getElementById('cantidad_dias').value;
     const motivo = document.getElementById('motivo').value;
     datosPendientes = { tipo_permiso: tipo, fecha_inicio: fechaI, fecha_fin: fechaF, cantidad_dias: dias, motivo, id: editandoId };
@@ -755,31 +816,19 @@ function actualizarLimitesHoraFin() {
 }
 
 function actualizarLimitesFechaFin() {
-//controla que el permiso no dure mas de lo permitido
-    const iI = document.getElementById('fecha_inicio');
-    const iF = document.getElementById('fecha_fin');
-//si no hay fecha de inicio no podemos calcular nada
-    if (!iI || !iF || !iI.value) return;
-//la fecha de fin no puede ser mas chica que la de inicio
-    iF.min = iI.value;
-
-    let fMax = parseLocal(iI.value);
-
-//contamos tres dias de trabajo saltando los fines de semana
-    let dH = (fMax.getDay() === 0 || fMax.getDay() === 6) ? 0 : 1;
-    while (dH < 3) {
-        fMax.setDate(fMax.getDate() + 1);
-        if (fMax.getDay() !== 0 && fMax.getDay() !== 6) dH++;
+    const inicio = document.getElementById('fecha_inicio');
+    const fin = document.getElementById('fecha_fin');
+    if (!inicio || !fin) return;
+    // Tanto el permiso ordinario como el de cumpleaños son de un día completo.
+    fin.readOnly = true;
+    fin.value = inicio.value;
+    if (inicio.value) {
+        fin.min = inicio.value;
+        fin.max = inicio.value;
+    } else {
+        fin.removeAttribute('min');
+        fin.removeAttribute('max');
     }
-
-//formateamos la fecha maxima para el calendario del navegador
-    const y = fMax.getFullYear();
-    const m = String(fMax.getMonth() + 1).padStart(2, '0');
-    const d = String(fMax.getDate()).padStart(2, '0');
-    iF.max = `${y}-${m}-${d}`;
-
-//si la fecha que estaba puesta se pasa del limite la corregimos
-    if (iF.value > iF.max || iF.value < iF.min) iF.value = iI.value;
 }
 
 function abrirPerfil(conSeguridad) {
@@ -805,11 +854,12 @@ function abrirPerfil(conSeguridad) {
 //mostramos la ventana flotante
     modalPerfilInstancia.show();
 }
-function verificarDias(fechaNueva) {
+function verificarDias(fechaNueva, tipoExcluir = null, idExcluir = null) {
 //revisa si la fecha que eligieron ya tiene un tramite activo
-    const fechaBusqueda = typeof fechaNueva === 'string' ? fechaNueva : fechaNueva.toISOString().split('T')[0];
+    const fechaBusqueda = typeof fechaNueva === 'string' ? fechaNueva : fechaLocal(fechaNueva);
 
     return todosLosRegistrosGlobal.some(reg => {
+        if (idExcluir !== null && String(reg.id) === String(idExcluir) && reg.tipoTramite === tipoExcluir) return false;
 //si el tramite fue cancelado o rechazado no estorba
         if (reg.estado === 'Rechazado' || reg.estado === 'Cancelado') return false;
 
@@ -826,40 +876,38 @@ function verificarDias(fechaNueva) {
     });
 }
 //funcion para contadores
-async function actualizarPresupuestoSalidas() {
-//obtenemos la llave de seguridad para pedir los datos
+async function actualizarPresupuestoSalidas(fecha) {
     const token = sessionStorage.getItem('token');
     if (!token) return;
-
+    if (typeof fecha === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fecha)) fechaPresupuestoSeleccionada = fecha;
+    const elegida = fechaPresupuestoSeleccionada || configNegocio.hoy;
+    const consulta = ++consultaPresupuesto;
     try {
-//llamamos a la api para saber cuantos tramites lleva el profe
-        const resp = await fetch('/api/login/contadores', {
-            headers: { 'x-token': token }
-        });
+        const resp = await fetch(`/api/login/contadores?fecha=${encodeURIComponent(elegida)}`, { headers: { 'x-token': token } });
         const data = await resp.json();
-
-        if (data.ok) {
-//dibujamos las barras de progreso con la info nueva
+        if (data.ok && consulta === consultaPresupuesto) {
             renderizarBarra('pases', data.pases.usados);
             renderizarBarra('permisos', data.permisos.usados);
+            renderizarBarra('cumpleanos', data.cumpleanos.usados, 1);
+            const periodo = Math.floor((Number(elegida.substring(5, 7)) - 1) / 4);
+            const cuatrimestres = ['enero–abril', 'mayo–agosto', 'septiembre–diciembre'];
+            document.getElementById('presupuesto-periodo').textContent = `Cupos según la fecha ${elegida}: pases del mes ${elegida.substring(0, 7)}, permisos de ${cuatrimestres[periodo]} de ${elegida.substring(0, 4)} y cumpleaños del año ${elegida.substring(0, 4)}. Incluyen pendientes, Vo.Bo. y aprobados.`;
         }
-    } catch (error) {
-        console.error("Error al cargar presupuesto:", error);
-    }
+    } catch (error) { console.error('Error al cargar presupuesto:', error); }
 }
 //funcion para barra visual
-function renderizarBarra(tipo, usados) {
+function renderizarBarra(tipo, usados, limite = 3) {
 //buscamos los elementos de la barra y el texto del numero
     const badge = document.getElementById(`${tipo}-badge`);
     const bar = document.getElementById(`${tipo}-bar`);
 //calculamos el porcentaje basado en el maximo de tres tramites
-    const porcentaje = (usados / 3) * 100;
+    const porcentaje = Math.min(100, (usados / limite) * 100);
 
-    badge.textContent = `${usados} / 3`;
+    badge.textContent = `${usados} / ${limite}`;
     bar.style.width = `${porcentaje}%`;
 
 //si ya uso los tres ponemos la barra en rojo por peligro
-    if (usados >= 3) {
+    if (usados >= limite) {
         badge.className = "badge rounded-pill bg-danger";
         bar.className = "progress-bar bg-danger";
     } else if (usados === 2) {
@@ -913,11 +961,10 @@ function abrirModalSemanaRAPIDO() {
     const contenedor = document.getElementById('contenedor-dias-semana');
     contenedor.innerHTML = '';
 
-    const hoyReal = new Date();
+    const hoyReal = parseLocal(configNegocio.hoy);
 //calculamos que dia de la semana es hoy para sacar los demas
     const diaSemana = hoyReal.getDay() === 0 ? 7 : hoyReal.getDay();
-    const hoyCheck = new Date();
-    hoyCheck.setHours(0, 0, 0, 0);
+    const hoyCheck = parseLocal(configNegocio.hoy);
 
     const nombresDias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
 
@@ -938,7 +985,7 @@ function abrirModalSemanaRAPIDO() {
         const esFestivo = festivosGlobales.some(f => f.fecha.split('T')[0] === fechaStr);
         const esCumple = usuario?.fecha_nacimiento && fechaStr.substring(5, 10) === usuario.fecha_nacimiento.substring(5, 10);
 
-        const esBloqueado = esPasado || ocupado || esFestivo || esCumple;
+        const esBloqueado = esPasado || ocupado || esFestivo;
 
 //creamos la etiqueta que dice porque no se puede elegir el dia
         let labelEstado = '';
@@ -958,13 +1005,7 @@ function abrirModalSemanaRAPIDO() {
             btn.onclick = () => {
                 modalSemanaFABInstancia.hide();
 
-                volverPaso1();
-                document.getElementById('fecha_uso').value = fechaStr;
-                document.getElementById('fecha_inicio').value = fechaStr;
-                actualizarLimitesFechaFin();
-                document.getElementById('fecha_fin').value = fechaStr;
-                calcularDiasPermiso();
-                setTimeout(() => modalInstancia.show(), 350);
+                setTimeout(() => abrirSolicitudEnFecha(fechaStr), 350);
             };
         }
 

@@ -79,6 +79,11 @@ app.get('/api/dias/ver', validarToken, soloRoles('Docente', 'Administrador', 'RR
     }
 });
 
+app.get('/api/negocio/config', validarToken, soloRoles('Docente', 'Administrador', 'RRHH'), (req, res) => {
+    const reglas = require('./negocio/reglas');
+    res.json({ ok: true, hoy: reglas.hoy(), zonaHoraria: reglas.zonaHoraria, maxDiasPermiso: 1, cumpleanosInhabil: false });
+});
+
 app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     const status = error.type === 'entity.too.large' ? 413 : error.type === 'entity.parse.failed' ? 400 : 500;

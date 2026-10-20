@@ -7,7 +7,6 @@ const validarToken = require('../validacion/valLogin');
 const { soloRoles, tramite, cuerpoSimple } = require('../seguridad/acceso');
 router.use(cuerpoSimple);
 // Importamos validaciones específicas (por ejemplo, el límite de 3 pases o días festivos)
-const validaciones = require('../validacion/valMes');
 // Ruta para ver los pases del usuario logueado
 router.get('/ver', validarToken, soloRoles('Docente'), pasesControlador.verMisPases);
 // Ruta para crear un pase de salida mediante el método POST :v  Se incluye la validación de mes/día antes de llegar al controlador

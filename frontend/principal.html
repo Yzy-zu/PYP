@@ -111,8 +111,19 @@
                         </div>
                         <p class="text-muted mt-2 mb-0"
                             style="font-size: 0.7rem;">Límite cuatrimestral: 3
-                            días</p>
+                            permisos ordinarios</p>
                     </div>
+                    <div class="p-3 mb-3 border rounded-3 bg-white shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small fw-bold text-dark">Cumpleaños (Año)</span>
+                            <span id="cumpleanos-badge" class="badge rounded-pill bg-secondary">0 / 1</span>
+                        </div>
+                        <div class="progress" style="height: 8px; background-color: #e9ecef;">
+                            <div id="cumpleanos-bar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                        <p class="text-muted mt-2 mb-0" style="font-size: 0.7rem;">Un día completo adicional, exactamente en tu cumpleaños laborable; no se traslada.</p>
+                    </div>
+                    <p id="presupuesto-periodo" class="small text-muted" aria-live="polite"></p>
                 </div>
 
                 <h5 class="mt-4 mb-3 border-bottom pb-2 fw-bold"
@@ -244,7 +255,8 @@
                                         class="form-label fw-bold">Tipo</label>
                                     <select class="form-select"
                                         id="tipo_permiso" required>
-                                        <option value="Personal">Asunto
+                                        <option value="Cumpleaños">Cumpleaños (día adicional)</option>
+                                        <option value="Personal" selected>Asunto
                                             Personal</option>
                                         <option value="Salud">Salud /
                                             Médico</option>
@@ -256,7 +268,7 @@
                                     <label class="form-label fw-bold">Días
                                         solicitados</label>
                                     <input type="number" class="form-control"
-                                        id="cantidad_dias" min="1" max="3"
+                                        id="cantidad_dias" min="1" max="1" readonly
                                         value="1" required>
                                 </div>
                             </div>
@@ -271,9 +283,10 @@
                                     <label class="form-label fw-bold">Fecha
                                         Fin</label>
                                     <input type="date" class="form-control"
-                                        id="fecha_fin" required>
+                                        id="fecha_fin" readonly required>
                                 </div>
                             </div>
+                            <p id="aviso-permiso" class="small text-muted" aria-live="polite"></p>
                             <div class="mb-3">
                                 <label class="form-label fw-bold">Motivo /
                                     Justificación</label>
@@ -286,7 +299,7 @@
                                     onclick="volverPaso1()">Atrás</button>
                                 <button type="submit"
                                     class="btn btn-aero-blue">Enviar a
-                                    RRHH</button>
+                                    revisión</button>
                             </div>
                         </form>
 

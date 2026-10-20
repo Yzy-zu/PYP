@@ -42,39 +42,8 @@ ORDER BY p.fecha_solicitud DESC`;
     },
     obtenerTodosPases: async function () { return await this.obtenerTodos(); },
 
-    //consulta para contar pases mensuales
-    contarPasesMensuales: async (usuario_id) => {
-        try {
-            const sql = `SELECT COUNT(*) as total FROM pases_salida 
-                         WHERE usuario_id = ? 
-                         AND MONTH(fecha_uso) = MONTH(CURRENT_DATE()) 
-                         AND YEAR(fecha_uso) = YEAR(CURRENT_DATE())
-                         AND estado IN ('Pendiente', 'Aprobado')`;
+    contarPasesMensuales: async (usuario_id, fecha) => (await require('../negocio/tramites').contadores(usuario_id, fecha)).pases.usados,
 
-            const [rows] = await db.execute(sql, [usuario_id]);
-            return rows[0].total || 0;
-        } catch (error) {
-            console.error("Error en contador", error.code);
-            return 0;
-        }
-    },
-
-    //consulta para crear pase nuevo
-    crearPase: async (us, fU, hI, hF, motivo) => {
-        try {
-            const sql = `INSERT INTO pases_salida(usuario_id, fecha_uso, hora_inicio, hora_fin, motivo) VALUES(?,?,?,?,?)`;
-            const [datos] = await db.execute(sql, [us, fU, hI, hF, motivo]);
-            return datos;
-        } catch (error) { throw error; }
-    },
-    //consulta para modificar pase existente solo si el estado es "pendiente"
-    modPase: async (fU, hI, hF, motivo, id, usuarioId) => {
-        try {
-            const sql = `UPDATE pases_salida SET fecha_uso = ?, hora_inicio = ?, hora_fin = ?, motivo = ? WHERE id = ? AND usuario_id=? AND estado='Pendiente'`;
-            const [datos] = await db.execute(sql, [fU, hI, hF, motivo, id, usuarioId]);
-            return datos;
-        } catch (error) { throw error; }
-    },
     //consulta para cancelar un pase
     // En tu archivo de modelos SQL:
     cancelarPase: (estado, id, actor, previo) => require('../seguridad/acceso').cambiarEstado('pases_salida', estado, id, actor, previo),

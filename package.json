@@ -10,6 +10,7 @@
     "db:up": "node backend/scripts/local-db.js up",
     "db:verify": "node backend/scripts/local-db.js verify",
     "db:stop": "node backend/scripts/local-db.js stop",
-    "check:security": "node backend/scripts/check-security.js"
+    "check:security": "node backend/scripts/check-security.js",
+    "check:business": "node backend/scripts/check-business.js"
   }
 }

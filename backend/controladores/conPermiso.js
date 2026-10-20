@@ -1,7 +1,8 @@
 //importamos el modelo sql propio de permisos
 const usersql = require('../modelos/sqlPermiso');
 const { enviarNotificacionEstado } = require('../correos/correo');
-const sqlValidaciones = require('../modelos/sqlDias');
+const negocio = require('../negocio/tramites');
+const { responderError } = require('../negocio/reglas');
 const { notificar } = require('../seguridad/acceso');
 
 ////creamos el objeto con las funciones 
@@ -34,64 +35,18 @@ const permisosControlador = {
 
     //funcion para modificar permisos
     modPermisos: async (req, res) => {
-        const { tipo_permiso, fecha_inicio, fecha_fin, cantidad_dias, motivo, id } = req.body;
         try {
-            const permisos = await usersql.modPermiso(tipo_permiso, fecha_inicio, fecha_fin, cantidad_dias, motivo, id, req.usuario.id);
-            if (!permisos.affectedRows) {
-                return res.status(409).json({ ok: false, msg: 'El trámite cambió. Actualiza la pantalla.' });
-            }
-            notificar(req, 'permiso-actualizado', { id, nuevoEstado: 'Pendiente' }, req.usuario.id);
-            res.json({ ok: true, msg: "se ha modificado correctamente el permiso!" });
-        } catch (error) {
-            if (error.errno === 1644 || error.sqlState === '45000') {
-                return res.status(400).json({ ok: false, msg: error.sqlMessage })
-            }
-            res.status(500).json({ ok: false, mensaje: "hay un problema en el server" });
-        }
+            const result = await negocio.guardar('permiso', req.body, req.usuario, Number(req.body.id));
+            notificar(req, 'permiso-actualizado', { id: result.id, nuevoEstado: result.estado }, result.usuario_id);
+            res.json({ ok: true, msg: 'Permiso modificado.' });
+        } catch (error) { responderError(res, error); }
     },
-
-    //funcion para crear permiso añadiendo los campos de algunas columnas
     crearPermiso: async (req, res) => {
-        const { tipo_permiso, fecha_inicio, fecha_fin, cantidad_dias, motivo } = req.body;
-        const us = req.usuario.id;
-
         try {
-            const infoFecha = await sqlValidaciones.fechaEspecial(fecha_inicio, us);
-
-            if (infoFecha.esFestivo) {
-                return res.status(400).json({
-                    ok: false,
-                    msg: `Es dia festivo: ${infoFecha.esFestivo}`
-                });
-            }
-
-            if (infoFecha.esCumple) {
-                return res.status(400).json({
-                    ok: false,
-                    msg: "Feliz cumpleaños!!!"
-                });
-            }
-
-            const traslape = await sqlValidaciones.verificarT(us, fecha_inicio, fecha_fin);
-            if (traslape) {
-                return res.status(400).json({
-                    ok: false,
-                    msg: "Las fechas seleccionadas coinciden con otro trámite ya registrado"
-                });
-            }
-
-            const permisos = await usersql.crearPermiso(us, tipo_permiso, fecha_inicio, fecha_fin, cantidad_dias, motivo);
-            if (!permisos) {
-                return res.status(404).json({ ok: false, msg: "Algo salio mal" });
-            }
-            req.app.get('socketio').to('revision').emit('nuevo-permiso-creado', { msg: 'Un docente solicito un permiso' });
-            res.json({ ok: true, msg: "se ha creado correctamente el permiso!" });
-        } catch (error) {
-            if (error.errno === 1644 || error.sqlState === '45000') {
-                return res.status(400).json({ ok: false, msg: error.sqlMessage })
-            }
-            res.status(500).json({ ok: false, mensaje: "hay un problema en el server al crear" });
-        }
+            const result = await negocio.guardar('permiso', req.body, req.usuario);
+            notificar(req, 'nuevo-permiso-creado', { msg: 'Nueva solicitud de permiso.' }, result.usuario_id);
+            res.json({ ok: true, msg: 'Permiso creado.', id: result.id });
+        } catch (error) { responderError(res, error); }
     },
     //cancelar un permiso (Aprobar/Rechazar/Cancelar)
     cancelarPermiso: async (req, res) => {
@@ -121,8 +76,7 @@ const permisosControlador = {
             res.json({ ok: true, msg: 'Permiso actualizado.' });
 
         } catch (error) {
-            console.error("Error en cancelar:", error.code);
-            res.status(500).json({ ok: false, msg: "Error de server" });
+            responderError(res, error);
         }
     }
 }

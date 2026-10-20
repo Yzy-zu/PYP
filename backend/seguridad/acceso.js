@@ -26,12 +26,7 @@ function tramite(tabla, accion) {
     };
 }
 async function cambiarEstado(tabla, estado, id, actor, estadoAnterior) {
-    if (!['pases_salida', 'permisos_goce'].includes(tabla)) throw new Error('Tabla no autorizada.');
-    const params = [estado, actor.id, id, estadoAnterior];
-    let where = 'id=? AND estado=?';
-    if (actor.rol === 'Docente') { where += ' AND usuario_id=?'; params.push(actor.id); }
-    const [result] = await db.execute(`UPDATE ${tabla} SET estado=?,revisado_por=?,fecha_revision=NOW() WHERE ${where}`, params);
-    return result.affectedRows > 0;
+    return require('../negocio/tramites').cambiarEstado(tabla, estado, id, actor, estadoAnterior);
 }
 function notificar(req, evento, data, usuarioId) {
     const destino = req.app.get('socketio').to('revision').to(`usuario:${usuarioId}`);

@@ -3,6 +3,8 @@ const bcrypt = require('bcryptjs');
 const crypto = require('node:crypto');
 const { tokenRoot, datosPublicos, cerrarSockets, roles } = require('../seguridad/sesiones');
 const { passwordValida } = require('../seguridad/credenciales');
+const negocio = require('../negocio/tramites');
+const { responderError } = require('../negocio/reglas');
 
 const areas = ['Tecnologías de la Información', 'Gastronomía', 'Enfermería', 'Energías Renovables', 'Mantenimiento Industrial', 'Contabilidad'];
 const categorias = ['Profesor de Asignatura', 'Profesor de Tiempo Completo', 'Técnico Académico', 'Administrativo'];
@@ -84,7 +86,7 @@ function endpoint(work) {
     return async (req, res) => {
         try { await work(req, res); }
         catch (error) {
-            if (error.status === 400) return res.status(400).json({ ok: false, msg: error.message });
+            if (error.status || error.sqlState === '45000' || ['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT'].includes(error.code)) return responderError(res, error);
             if (error.code === 'ER_DUP_ENTRY') return res.status(409).json({ ok: false, msg: 'El registro ya existe' });
             res.status(500).json({ ok: false, msg: 'No se pudo completar la operación' });
         }
@@ -160,10 +162,7 @@ const rootControlador = {
         res.json({ ok: true, data });
     }),
     overridePase: endpoint(async (req, res) => {
-        const b = req.body;
-        const [result] = await db.execute(`UPDATE pases_salida SET fecha_uso = ?, hora_inicio = ?, hora_fin = ?, estado = ?, motivo = ? WHERE id = ?`,
-            [fecha(b.fecha_uso), hora(b.hora_inicio), hora(b.hora_fin), seleccion(b.estado, estados), texto(b.motivo, 10000), req.params.id]);
-        if (!result.affectedRows) return res.status(404).json({ ok: false, msg: 'Pase no encontrado' });
+        await negocio.guardar('pase', req.body, req.usuario, Number(req.params.id), true);
         res.json({ ok: true });
     }),
     eliminarPase: endpoint(async (req, res) => {
@@ -176,13 +175,9 @@ const rootControlador = {
         res.json({ ok: true, data });
     }),
     overridePermiso: endpoint(async (req, res) => {
-        const b = req.body;
-        const cantidad = typeof b.cantidad_dias === 'string' && /^\d+$/.test(b.cantidad_dias)
-            ? Number(b.cantidad_dias) : b.cantidad_dias;
-        if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > 366) invalid('Cantidad de días inválida');
-        const [result] = await db.execute(`UPDATE permisos_goce SET tipo_permiso = ?, fecha_inicio = ?, fecha_fin = ?, cantidad_dias = ?, estado = ? WHERE id = ?`,
-            [seleccion(b.tipo_permiso, tipos), fecha(b.fecha_inicio), fecha(b.fecha_fin), cantidad, seleccion(b.estado, estados), req.params.id]);
-        if (!result.affectedRows) return res.status(404).json({ ok: false, msg: 'Permiso no encontrado' });
+        const [[actual]] = await db.execute('SELECT motivo FROM permisos_goce WHERE id=?', [req.params.id]);
+        if (!actual) return res.status(404).json({ ok: false, msg: 'Permiso no encontrado' });
+        await negocio.guardar('permiso', { ...req.body, motivo: req.body.motivo ?? actual.motivo }, req.usuario, Number(req.params.id), true);
         res.json({ ok: true });
     }),
     eliminarPermiso: endpoint(async (req, res) => {

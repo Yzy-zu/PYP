@@ -79,14 +79,14 @@ async function fixture(user, kind) {
             VALUES (?, '2027-02-10', '09:00', '10:00', ?)`, [user.id, prefix])
         : await db.execute(`INSERT INTO permisos_goce
             (usuario_id, tipo_permiso, fecha_inicio, fecha_fin, cantidad_dias, motivo)
-            VALUES (?, 'Personal', '2027-02-10', '2027-02-10', 1, ?)`, [user.id, prefix]);
+            VALUES (?, 'Personal', '2027-02-11', '2027-02-11', 1, ?)`, [user.id, prefix]);
     return { id: row.insertId, kind, table: kind === 'pases' ? 'pases_salida' : 'permisos_goce' };
 }
 
 function edit(record) {
     return record.kind === 'pases'
         ? { id: record.id, fecha_uso: '2027-02-10', hora_inicio: '09:00', hora_fin: '10:00', motivo: `${prefix} editado` }
-        : { id: record.id, tipo_permiso: 'Personal', fecha_inicio: '2027-02-10', fecha_fin: '2027-02-10', cantidad_dias: 1, motivo: `${prefix} editado` };
+        : { id: record.id, tipo_permiso: 'Personal', fecha_inicio: '2027-02-11', fecha_fin: '2027-02-11', cantidad_dias: 1, motivo: `${prefix} editado` };
 }
 
 async function setState(record, value) {

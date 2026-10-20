@@ -1,7 +1,8 @@
 //importamos el modelo sql de pases
 const pasesSql = require('../modelos/sqlPase');
 const { enviarNotificacionEstado } = require('../correos/correo');
-const sqlValidaciones = require('../modelos/sqlDias');
+const negocio = require('../negocio/tramites');
+const { responderError } = require('../negocio/reglas');
 const { notificar } = require('../seguridad/acceso');
 
 
@@ -9,54 +10,10 @@ const pasesControlador = {
     //para crearpases
     crearPase: async (req, res) => {
         try {
-            const { fecha_uso, hora_inicio, hora_fin, motivo } = req.body;
-            const { id: usuario_id } = req.usuario;
-
-            if (!fecha_uso || !hora_inicio || !motivo) {
-                return res.status(400).json({
-                    ok: false, msg: "Faltan campos obligatorios :v"
-                });
-            }
-
-            const pasesEsteMes = await pasesSql.contarPasesMensuales(usuario_id);
-            if (pasesEsteMes >= 3) {
-
-                return res.status(403).json({ ok: false, msg: "limite alcanzado: solo puedes pedir 3 pases por mes" });
-            }
-
-            const infoFecha = await sqlValidaciones.fechaEspecial(fecha_uso, usuario_id);
-
-            if (infoFecha.esFestivo) {
-                return res.status(400).json({
-                    ok: false,
-                    msg: `Es día festivo: ${infoFecha.esFestivo}`
-                });
-            }
-
-            if (infoFecha.esCumple) {
-                return res.status(400).json({
-                    ok: false,
-                    msg: "Feliz cumpleaños!!!"
-                });
-            }
-
-            const traslape = await sqlValidaciones.verificarT(usuario_id, fecha_uso);
-            if (traslape) {
-                return res.status(400).json({
-                    ok: false,
-                    msg: "Ya tienes un trámite registrado o pendiente para esta fecha"
-                });
-            }
-
-            const resultado = await pasesSql.crearPase(usuario_id, fecha_uso, hora_inicio, hora_fin, motivo);
-            req.app.get('socketio').to('revision').emit('nuevo-pase-creado', { msg: 'Un docente solicitó un pase' });
-            res.json({ ok: true, msg: "Pase creado con éeito" });
-
-
-        } catch (error) {
-            console.error('Error de operación:', error.code || 'UNKNOWN');
-            res.status(500).json({ ok: false, msg: "error de servidor al crear pase" });
-        }
+            const result = await negocio.guardar('pase', req.body, req.usuario);
+            notificar(req, 'nuevo-pase-creado', { msg: 'Nueva solicitud de pase.' }, result.usuario_id);
+            res.json({ ok: true, msg: 'Pase creado.', id: result.id });
+        } catch (error) { responderError(res, error); }
     },
 
     //ver pases
@@ -108,28 +65,17 @@ const pasesControlador = {
             res.json({ ok: true, msg: 'Pase actualizado.' });
 
         } catch (error) {
-            console.error("Error en cancelarPase:", error.code);
-            res.status(500).json({ ok: false, msg: "Error al actualizar estado" });
+            responderError(res, error);
         }
     },
 
     //modificar un pase
     modificarPase: async (req, res) => {
         try {
-            const { id, fecha_uso, hora_inicio, hora_fin, motivo } = req.body;
-            const result = await pasesSql.modPase(fecha_uso, hora_inicio, hora_fin, motivo, id, req.usuario.id);
-            if (!result.affectedRows) return res.status(409).json({ ok: false, msg: 'El trámite cambió. Actualiza la pantalla.' });
-            notificar(req, 'pase-actualizado', { id, nuevoEstado: 'Pendiente' }, req.usuario.id);
-            res.json({ ok: true, msg: "Pase modificado correctamente" });
-        } catch (error) {
-            if (error.errno === 1644 || error.sqlState === '45000') {
-                return res.status(400).json({ ok: false, msg: error.sqlMessage });
-            }
-            console.error('Error de operación:', error.code || 'UNKNOWN');
-            res.status(500).json({ ok: false, msg: "Error del server al modificar" });
-        }
-    },
+            const result = await negocio.guardar('pase', req.body, req.usuario, Number(req.body.id));
+            notificar(req, 'pase-actualizado', { id: result.id, nuevoEstado: result.estado }, result.usuario_id);
+            res.json({ ok: true, msg: 'Pase modificado.' });
+        } catch (error) { responderError(res, error); }
+    }
 };
-
-
 module.exports = pasesControlador;

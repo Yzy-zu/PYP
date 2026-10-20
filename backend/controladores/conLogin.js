@@ -55,12 +55,9 @@ const loginControlador = {
     },
     obtenerContadores: async (req, res) => {
         try {
-            const [pases, permisos] = await Promise.all([
-                require('../modelos/sqlPase').contarPasesMensuales(req.usuario.id),
-                require('../modelos/sqlPermiso').contarPermisosCuatrimestrales(req.usuario.id)
-            ]);
-            res.json({ ok: true, pases: { usados: pases, disponibles: Math.max(0, 3 - pases) }, permisos: { usados: permisos, disponibles: Math.max(0, 3 - permisos) } });
-        } catch { res.status(503).json({ ok: false, msg: 'No se pudieron obtener los contadores.' }); }
+            const data = await require('../negocio/tramites').contadores(req.usuario.id, req.query.fecha);
+            res.json({ ok: true, ...data });
+        } catch (error) { require('../negocio/reglas').responderError(res, error); }
     }
 };
 module.exports = loginControlador;
