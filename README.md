@@ -1,5 +1,7 @@
 # Pases y permisos UTM — recuperación local
 
+Para continuar el diseño con otro asistente: [contexto completo y pendientes del frontend](CONTEXTO_PARA_FRONTEND.md).
+
 Requisitos: Node.js 20 o superior, npm y Docker con Compose. El contenedor usa MariaDB 10.4.32 para reproducir el motor del respaldo; esta elección corresponde a recuperación local, no a una decisión de despliegue escolar.
 
 ## Preparación
