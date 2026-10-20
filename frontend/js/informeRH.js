@@ -11,7 +11,7 @@ let charts = {};
 if (!token) window.location.href = "login.html";
 
 //cuando la ventana termina de cargar arrancamos todo
-document.addEventListener('DOMContentLoaded', async () => {
+Seguridad.alCargar(async () => {
     try {
         //pedimos los pases y los permisos al mismo tiempo para no tardar
         const [resPases, resPermisos] = await Promise.all([
@@ -24,18 +24,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         const permisosRaw = (await resPermisos.json()).data || [];
 
         //acomodamos los pases para que tengan el mismo formato
-        const pases = pasesRaw.map(p => ({ 
-            ...p, 
-            tipo: 'Pase', 
-            fechaClave: p.fecha_uso.split('T')[0], 
+        const pases = pasesRaw.map(p => ({
+            ...p,
+            tipo: 'Pase',
+            fechaClave: p.fecha_uso.split('T')[0],
             diasImpacto: 0.1 //un pase vale como un ratito del dia
         }));
 
         //acomodamos los permisos con sus dias completos
-        const permisos = permisosRaw.map(p => ({ 
-            ...p, 
-            tipo: 'Permiso', 
-            fechaClave: p.fecha_inicio.split('T')[0], 
+        const permisos = permisosRaw.map(p => ({
+            ...p,
+            tipo: 'Permiso',
+            fechaClave: p.fecha_inicio.split('T')[0],
             diasImpacto: parseFloat(p.cantidad_dias || 1) //usamos los dias que vienen de la base
         }));
 
@@ -60,22 +60,22 @@ function recargarDashboard() {
     const hoy = new Date().toISOString().split('T')[0];
     //filtramos solo lo que ya esta aceptado
     const aprobados = datos.filter(d => d.estado === 'Aprobado');
-    
+
     //ponemos los numeros en los cuadritos de texto de la pantalla
     document.getElementById('stat-hoy').textContent = datos.filter(d => d.fechaClave === hoy).length;
     document.getElementById('stat-total').textContent = datos.length;
-    
+
     //sumamos todos los dias de falta para ver el total
     const diasTotales = aprobados.reduce((acc, curr) => acc + curr.diasImpacto, 0).toFixed(1);
     document.getElementById('stat-dias').textContent = diasTotales;
-    
+
     //calculamos el porcentaje de cosas aprobadas
     const tasa = datos.length > 0 ? ((aprobados.length / datos.length) * 100).toFixed(0) : 0;
     document.getElementById('stat-tasa').textContent = `${tasa}%`;
 
     //limpiamos los dibujos viejos antes de hacer los nuevos
     limpiarCharts();
-    
+
     //dibujamos la grafica de circulo para pases y permisos
     renderDoughnut(datos.filter(d => d.tipo === 'Pase').length, datos.filter(d => d.tipo === 'Permiso').length);
 
@@ -118,9 +118,9 @@ function renderAreas(objAreas) {
             labels: labels,
             datasets: [{ label: 'Total Trámites', data: labels.map(l => objAreas[l]), backgroundColor: '#4c51bf', borderRadius: 8 }]
         },
-        options: { 
-            indexAxis: 'y', 
-            maintainAspectRatio: false, 
+        options: {
+            indexAxis: 'y',
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } }
         }
     });
@@ -152,7 +152,7 @@ function renderTendencia(datos) {
 
 //llena la tabla de los maestros que mas piden permisos
 function renderRanking(datos) {
-    const docentes = {};
+    const docentes = Object.create(null);
     //contamos cada vez que aparece un nombre
     datos.forEach(d => {
         docentes[d.nombre_completo] = (docentes[d.nombre_completo] || 0) + 1;
@@ -164,7 +164,7 @@ function renderRanking(datos) {
     //metemos el html en la tabla con una barra de progreso
     tbody.innerHTML = sorted.map(([nombre, total]) => `
         <tr>
-            <td class="fw-bold">${nombre.split(' ').slice(0,2).join(' ')}</td>
+            <td class="fw-bold">${Seguridad.escapeHTML(nombre.split(' ').slice(0,2).join(' '))}</td>
             <td class="text-center"><span class="badge-soft badge-soft-teal">${total}</span></td>
             <td><div class="progress" style="height: 6px;"><div class="progress-bar bg-teal" style="background:#009186; width: ${Math.min(total*10, 100)}%"></div></div></td>
         </tr>
@@ -173,7 +173,7 @@ function renderRanking(datos) {
 
 //revisa si hay varios maestros de la misma area faltando el mismo dia
 function renderColisiones(datos) {
-    const col = {};
+    const col = Object.create(null);
     datos.forEach(d => {
         //si esta rechazado o no tiene area no nos importa para el choque
         if(d.estado === 'Rechazado' || !d.area_adscripcion) return;
@@ -195,9 +195,9 @@ function renderColisiones(datos) {
             const [f, a] = key.split('|');
             tbody.innerHTML += `
                 <tr>
-                    <td><i class="fa-solid fa-calendar-day me-2 text-muted"></i>${f}</td>
-                    <td><span class="badge-soft badge-soft-red">${a}</span></td>
-                    <td class="small fw-semibold text-dark">${profes.join(', ')}</td>
+                    <td><i class="fa-solid fa-calendar-day me-2 text-muted"></i>${Seguridad.escapeHTML(f)}</td>
+                    <td><span class="badge-soft badge-soft-red">${Seguridad.escapeHTML(a)}</span></td>
+                    <td class="small fw-semibold text-dark">${Seguridad.escapeHTML(profes.join(', '))}</td>
                 </tr>`;
         }
     }
@@ -212,3 +212,4 @@ function limpiarCharts() {
     Object.values(charts).forEach(c => c.destroy());
     charts = {};
 }
+Seguridad.alCargar(() => document.getElementById('btn-logout')?.addEventListener('click', () => Seguridad.salir()));

@@ -1,165 +1,66 @@
-//importamos el modelo de sql para poder usar las funciones de ahi adentro
 const bcrypt = require('bcryptjs');
 const usersql = require('../modelos/sqlLogin');
-const jwt = require('jsonwebtoken');
-//creamos el objeto que contentra las funciones con la logica
+const db = require('../bd/base');
+const { datosPublicos, tokenUsuario, cerrarSockets } = require('../seguridad/sesiones');
+const { passwordValida } = require('../seguridad/credenciales');
+
 const loginControlador = {
-    //esta es la funcion que se menciona en rutasLogin.js
-    verPerfil: async (req, res) => {
-        try{
-        //se saca el id de para poder meterla en la consulta sql
-        const {id} = req.usuario;
-        //con este le hablamos al archivo sql y a la funcion que hay ahi adentro
-        //le pasamos el id de la url para que lo meta como argumento en la consulta sql
-        const usuario = await usersql.buscarId(id);
-        if (!usuario) {
-            return res.status(404).json({
-                ok: false,
-                msg: "No existe el id :v"
-            });}
-        delete usuario.contraseña;
-            //si existe respondemos con los datos que nos arrojo sql
-        res.json({
-            ok: true,
-            data: usuario
-            });
-        //en caso de error mandamos el aviso
-        }catch(error){
-                res.status(500).json({ok: false, msg: "Error en el servidor"});
-            }
-    },
-    //funcion para hacer login con correo y password
-    //funcion para hacer login con correo y password
+    verPerfil: (req, res) => res.json({ ok: true, data: req.usuario }),
     iniciarLogin: async (req, res) => {
-        //obtenemos los datos del body que nos han enviado
-        const { correo, password } = req.body;
-        try {
-            //primero usamos una funcion para ver si existe el correo 
-            const usuario = await usersql.buscarCorreo(correo);
-            //sino existe detenemos y avisamos
-            if(!usuario){
-                return res.status(401).json({ok: false, msg: "Datos incorrectos"});    
-            }
-            //usamos un comparador para ver si la contraseña es correcta
-            //en este caso sacamos la password del front y el hash de la db
-            const passwordCorrecto = await bcrypt.compare(password, usuario.contraseña);
-            //sino es correcta damos el aviso
-            if(!passwordCorrecto) {
-                return res.status(401).json({ok: false, msg: "Datos incorrectos"});
-            }
-            //creamos el payload para hacer nuestro token de sesion :v
-            const payload = {
-                id: usuario.id,
-                rol: usuario.rol
-            }
-            //obtenemos nuestro token dando como argumentos el payload y el secreto
-            const token = jwt.sign(payload, process.env.JWT_SECRET, {
-                expiresIn: '4h'
-            });
-            //creamos una copia de usuario :P
-            const usuarioSeg = { ...usuario };
-            //borramos el dato password si es que existe por seguridad
-            delete usuarioSeg.contraseña;
-            //respondemos al front con un json: datos del usuario y el token de sesion
-            res.json({
-                ok: true, 
-                msg: "Credenciales correctas!!!",
-                usuario: usuarioSeg,
-                token});
-        //si algo sale mal avisamos :v
-        } catch (error) {
-        console.log(error);
-        res.status(500).json({ ok: false, msg: "Error interno" });
-    }},
-
-    //nueva funcion para revalidar 
-    nuevoToken: async (req, res) => {
-        try {
-            const { id } = req.usuario;
-            
-            const usuario = await usersql.buscarId(id);
-            
-            if (!usuario) {
-                return res.status(401).json({ ok: false, msg: "Usuario no encontrado" });
-            }
-
-            const token = jwt.sign({ id: usuario.id, rol: usuario.rol }, process.env.JWT_SECRET, {
-                expiresIn: '4h'
-            });
-
-            const usuarioSeg = { ...usuario };
-            delete usuarioSeg.contraseña;
-
-            res.json({
-                ok: true,
-                usuario: usuarioSeg,
-                token
-            });
-        } catch (error) {
-            res.status(500).json({ ok: false, msg: "Error al revalidar" });
+        const { correo, password } = req.body || {};
+        if (typeof correo !== 'string' || correo.length > 250 || typeof password !== 'string' || Buffer.byteLength(password) > 72) {
+            return res.status(400).json({ ok: false, msg: 'Correo o contraseña inválidos.' });
         }
+        try {
+            const usuario = await usersql.buscarCorreo(correo.trim());
+            if (!usuario || !usuario.activo || !await bcrypt.compare(password, usuario.contraseña)) {
+                return res.status(401).json({ ok: false, msg: 'Datos incorrectos.' });
+            }
+            res.json({ ok: true, usuario: datosPublicos(usuario), token: tokenUsuario(usuario) });
+        } catch { res.status(503).json({ ok: false, msg: 'No se pudo iniciar sesión.' }); }
     },
-    //funcion para actualizar la contraseña
-    acContraseña: async (req, res) => {
-        //sacamos parametros del body proporcionado por el front
-        const { password, npassword } = req.body;
-        const { id } = req.usuario;
-        try {
-            //buscamos datos del usuario
-            const usuario = await usersql.buscarId(id);
-            //comparamos si la password dada es igual a la de la db 
-            const coincide = await bcrypt.compare(password, usuario.contraseña);
-            //usamos una funcion para ver si es igual
-            if(!coincide) {
-                return res.status(401).json({ok: false, msg: "Error en la contraseña"});
-            }
-            //creamos la seguridad para hashear la nueva contraseña
-            const nueva = await bcrypt.genSalt(10);
-            //hasheamos la nueva contraseña 
-            const nuevapass = await  bcrypt.hash(npassword, nueva);
-            //usamos la funcion de sql para actualizar la contraseña
-            await usersql.actContraseña(nuevapass, id);
-            //avisamos que se cambio correctamente
-            res.json({ok: true, msg: "La contraseña se ha cambiado!!!!"});
-        } catch (error) {
-        //si algo falla, avisamos :v
-        res.status(500).json({ok: false, msg: "Error en el server"});
-    }
-},
-//nueva funcion para revalidar 
     nuevoToken: async (req, res) => {
-        const { id, rol, nombre_completo } = req.usuario;
-        
-        const token = jwt.sign({id, rol, nombre_completo}, process.env.JWT_SECRET, {
-                expiresIn: '4h'
-            });
-            res.json({
-                ok: true,
-                usuario: {id, rol, nombre_completo},
-                token
-            });
-        },
-        obtenerContadores: async (req, res) => {
+        if (req.usuario.id === 'SYSADMIN') return res.status(403).json({ ok: false, msg: 'Usa el acceso de administración técnica.' });
         try {
-            const { id } = req.usuario;
-            const pasesql = require('../modelos/sqlPase');
-            const permisosql = require('../modelos/sqlPermiso');
-
-            const [pasesUsados, permisosUsados] = await Promise.all([
-                pasesql.contarPasesMensuales(id),
-                permisosql.contarPermisosCuatrimestrales(id)
-            ]);
-
-            res.json({
-                ok: true,
-                pases: { usados: pasesUsados, disponibles: Math.max(0, 3 - pasesUsados) },
-                permisos: { usados: permisosUsados, disponibles: Math.max(0, 3 - permisosUsados) }
-            });
-        } catch (error) {
-            res.status(500).json({ ok: false, msg: "Error al obtener contadores" });
+            const usuario = await usersql.buscarId(req.usuario.id);
+            if (!usuario?.activo || usuario.session_version !== req.sesion.sv || usuario.rol !== req.sesion.rol) {
+                return res.status(401).json({ ok: false, msg: 'La sesión cambió. Ingresa de nuevo.' });
+            }
+            res.json({ ok: true, usuario: datosPublicos(usuario), token: tokenUsuario(usuario) });
+        } catch { res.status(503).json({ ok: false, msg: 'No se pudo renovar la sesión.' }); }
+    },
+    acContraseña: async (req, res) => {
+        const { password, npassword } = req.body || {};
+        if (typeof password !== 'string' || Buffer.byteLength(password) > 72 || !passwordValida(npassword) || password === npassword) {
+            return res.status(400).json({ ok: false, msg: 'Usa una contraseña diferente, de al menos 10 caracteres y hasta 72 bytes.' });
         }
+        try {
+            const usuario = await usersql.buscarId(req.usuario.id);
+            if (!usuario || !await bcrypt.compare(password, usuario.contraseña)) {
+                return res.status(401).json({ ok: false, msg: 'Contraseña actual incorrecta.' });
+            }
+            const hash = await bcrypt.hash(npassword, 10);
+            const [changed] = await db.execute(`UPDATE usuarios SET contraseña=?,session_version=session_version+1,debe_cambiar_password=0
+                WHERE id=? AND activo=1 AND session_version=?`, [hash, usuario.id, req.sesion.sv]);
+            if (!changed.affectedRows) return res.status(409).json({ ok: false, msg: 'La cuenta cambió. Ingresa de nuevo.' });
+            cerrarSockets(req, usuario.id);
+            const actual = await usersql.buscarId(usuario.id);
+            res.json({ ok: true, msg: 'Contraseña actualizada.', token: tokenUsuario(actual), usuario: datosPublicos(actual) });
+        } catch { res.status(503).json({ ok: false, msg: 'No se pudo cambiar la contraseña.' }); }
+    },
+    logout: async (req, res) => {
+        await db.execute('UPDATE usuarios SET session_version=session_version+1 WHERE id=? AND session_version=?', [req.usuario.id, req.sesion.sv]);
+        cerrarSockets(req, req.usuario.id);
+        res.json({ ok: true });
+    },
+    obtenerContadores: async (req, res) => {
+        try {
+            const [pases, permisos] = await Promise.all([
+                require('../modelos/sqlPase').contarPasesMensuales(req.usuario.id),
+                require('../modelos/sqlPermiso').contarPermisosCuatrimestrales(req.usuario.id)
+            ]);
+            res.json({ ok: true, pases: { usados: pases, disponibles: Math.max(0, 3 - pases) }, permisos: { usados: permisos, disponibles: Math.max(0, 3 - permisos) } });
+        } catch { res.status(503).json({ ok: false, msg: 'No se pudieron obtener los contadores.' }); }
     }
-}
-//con esto exportamos el objeto y sus funciones para que cualquier archivo pueda usarlo
-//se llamara "logincontrolador"
+};
 module.exports = loginControlador;

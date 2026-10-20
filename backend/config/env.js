@@ -20,7 +20,7 @@ function port(name, fallback) {
 const jwtSecret = required('JWT_SECRET');
 if (jwtSecret.length < 32) throw new Error('JWT_SECRET debe tener al menos 32 caracteres.');
 required('ROOT_USER');
-required('ROOT_PASS');
+if (required('ROOT_PASS').length < 12) throw new Error('ROOT_PASS debe tener al menos 12 caracteres.');
 
 if (process.env.EMAIL_ENABLED && !['true', 'false'].includes(process.env.EMAIL_ENABLED)) {
     throw new Error('EMAIL_ENABLED debe ser true o false.');

@@ -131,6 +131,10 @@ function verify(container, demo) {
             (SELECT COUNT(*) FROM (SELECT TABLE_NAME,INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA='${database}' GROUP BY TABLE_NAME,INDEX_NAME) AS indices) AS indices;`);
         const lastLine = checks.trim().split('\n').at(-1).split('\t').map(Number);
         if (lastLine.join(',') !== '4,3,4,9') throw new Error(`Estructura incompleta en ${database}; revisar restauración.`);
+        const security = sql(container, null, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='${database}' AND TABLE_NAME='usuarios'
+            AND COLUMN_NAME IN ('activo','session_version','debe_cambiar_password');`);
+        const columns = Number(security.trim().split('\n').at(-1));
+        if (columns !== (database === archive ? 0 : 3)) throw new Error(`Migración de seguridad inesperada en ${database}.`);
         if (database === archive) {
             const recovered = Object.fromEntries(counts.trim().split('\n').slice(1).map(line => {
                 const [table, count] = line.split('\t'); return [table, Number(count)];
@@ -161,7 +165,11 @@ async function main() {
     }
     const container = compose(['ps', '-q', 'db']).trim();
     if (!container) throw new Error('No está disponible el contenedor local. Ejecuta npm run db:up.');
-    if (action === 'up') { console.log('BD local disponible.'); return; }
+    if (action === 'up') {
+        if (tableCount(container, demo) !== 4) throw new Error('Ejecuta npm run setup:local antes de iniciar.');
+        sql(container, demo, fs.readFileSync(path.join(root, 'backend/bd/migraciones/002_seguridad.sql'), 'utf8'));
+        console.log('BD local disponible; migración de seguridad aplicada.'); return;
+    }
     if (action === 'setup') {
         const dump = fs.readFileSync(dumpPath, 'utf8');
         if (crypto.createHash('sha256').update(dump).digest('hex') !== expectedHash) throw new Error('El respaldo cambió; revisarlo antes de restaurar.');
@@ -176,6 +184,7 @@ async function main() {
             sql(container, demo, structureOnly(dump));
             sql(container, demo, `INSERT INTO dias_festivos SELECT * FROM ${identifier(archive)}.dias_festivos;`);
         }
+        sql(container, demo, fs.readFileSync(path.join(root, 'backend/bd/migraciones/002_seguridad.sql'), 'utf8'));
         verify(container, demo);
         await seed(config);
     }

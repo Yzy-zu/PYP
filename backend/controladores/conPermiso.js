@@ -2,6 +2,7 @@
 const usersql = require('../modelos/sqlPermiso');
 const { enviarNotificacionEstado } = require('../correos/correo');
 const sqlValidaciones = require('../modelos/sqlDias');
+const { notificar } = require('../seguridad/acceso');
 
 ////creamos el objeto con las funciones 
 const permisosControlador = {
@@ -24,7 +25,8 @@ const permisosControlador = {
     verTodosPermisos: async (req, res) => {
         try {
             const permisos = await usersql.obtenerTodos();
-            res.json({ ok: true, data: permisos });
+            const data = req.usuario.rol === 'Administrador' ? permisos.map(({ rfc, fecha_nacimiento, fecha_ingreso, categoria, tipo_contrato, ...solicitud }) => solicitud) : permisos;
+            res.json({ ok: true, data });
         } catch (error) {
             res.status(500).json({ ok: false, msg: "Error de server" });
         }
@@ -34,10 +36,11 @@ const permisosControlador = {
     modPermisos: async (req, res) => {
         const { tipo_permiso, fecha_inicio, fecha_fin, cantidad_dias, motivo, id } = req.body;
         try {
-            const permisos = await usersql.modPermiso(tipo_permiso, fecha_inicio, fecha_fin, cantidad_dias, motivo, id);
-            if (!permisos) {
-                return res.status(404).json({ ok: false, msg: "Algo salio mal" });
+            const permisos = await usersql.modPermiso(tipo_permiso, fecha_inicio, fecha_fin, cantidad_dias, motivo, id, req.usuario.id);
+            if (!permisos.affectedRows) {
+                return res.status(409).json({ ok: false, msg: 'El trámite cambió. Actualiza la pantalla.' });
             }
+            notificar(req, 'permiso-actualizado', { id, nuevoEstado: 'Pendiente' }, req.usuario.id);
             res.json({ ok: true, msg: "se ha modificado correctamente el permiso!" });
         } catch (error) {
             if (error.errno === 1644 || error.sqlState === '45000') {
@@ -81,8 +84,7 @@ const permisosControlador = {
             if (!permisos) {
                 return res.status(404).json({ ok: false, msg: "Algo salio mal" });
             }
-            const io = req.app.get('socketio');
-            io.emit('nuevo-permiso-creado', { msg: 'Un docente solicito un permiso' });
+            req.app.get('socketio').to('revision').emit('nuevo-permiso-creado', { msg: 'Un docente solicito un permiso' });
             res.json({ ok: true, msg: "se ha creado correctamente el permiso!" });
         } catch (error) {
             if (error.errno === 1644 || error.sqlState === '45000') {
@@ -96,20 +98,17 @@ const permisosControlador = {
         const { cancelar, id } = req.body;
         try {
             //sacamos el ID del admin que esta haciendo el movimiento
-            const revisado_por = req.usuario.id;
 
             //intentamos actualizar el estado incluyendo quien revisa
-            const permisos = await usersql.cancelarPermiso(cancelar, id, revisado_por);
+            const permisos = await usersql.cancelarPermiso(cancelar, id, req.usuario, req.tramite.estado);
 
             if (!permisos) {
-                return res.status(404).json({ ok: false, msg: "Algo salio mal" });
+                return res.status(409).json({ ok: false, msg: 'El trámite cambió. Actualiza la pantalla.' });
             }
             const docente = await usersql.obtenerInfoDocentePorPermiso(id);
 
             //socket para avisar en tiempo real
-            const io = req.app.get('socketio');
-            io.emit('permiso-actualizado', { id, nuevoEstado: cancelar });
-            req.app.get('socketio').emit('actualizar-contadores');
+            notificar(req, 'permiso-actualizado', { id, nuevoEstado: cancelar }, req.tramite.usuario_id);
             if (docente && docente.correo_institucional) {
                 enviarNotificacionEstado(
                     docente.correo_institucional,
@@ -119,10 +118,10 @@ const permisosControlador = {
                 );
             }
 
-            res.json({ ok: true, msg: "Estado modificado y docente notificado!" });
+            res.json({ ok: true, msg: 'Permiso actualizado.' });
 
         } catch (error) {
-            console.error("Error en cancelar:", error);
+            console.error("Error en cancelar:", error.code);
             res.status(500).json({ ok: false, msg: "Error de server" });
         }
     }

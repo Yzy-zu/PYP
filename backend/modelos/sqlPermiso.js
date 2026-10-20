@@ -24,17 +24,17 @@ const usersql = {
             //regresamos "datos" pero solo la primera fila 
             return datos;
         } catch (error) {
-            console.error("Error al obtener permisos", error);
+            console.error("Error al obtener permisos", error.code);
             throw error;
         }
     },
     //esta funcion sirve para modificar el permiso en algun dato cn la consulta sql
-    modPermiso: async (tipo, fI, fF, cD, motivo, id) => {
+    modPermiso: async (tipo, fI, fF, cD, motivo, id, usuarioId) => {
         try {
             const sql = `update permisos_goce set tipo_permiso = ?, fecha_inicio = ?,
-            fecha_fin = ?, cantidad_dias = ?, motivo = ? where id = ? `;
+            fecha_fin = ?, cantidad_dias = ?, motivo = ? where id = ? AND usuario_id=? AND estado='Pendiente' `;
             //mandamos la consulta con los datos del controlador
-            const [datos] = await db.execute(sql, [tipo, fI, fF, cD, motivo, id]);
+            const [datos] = await db.execute(sql, [tipo, fI, fF, cD, motivo, id, usuarioId]);
             //regresamos para que el contolador sepa que paso 
             return datos;
         } catch (error) {
@@ -50,22 +50,13 @@ const usersql = {
             const [datos] = await db.execute(sql, [us, tipo, fI, fF, cD, motivo]);
             return datos;
         } catch (error) {
-            console.error("Error al crear", error);
+            console.error("Error al crear", error.code);
             throw error;
         }
     },
     //funcion para cancelar un permiso
     //funcion para cancelar o aprobar el permiso en la db
-    cancelarPermiso: async (estado, id, revisado_por) => {
-        try {
-            const sql = 'UPDATE permisos_goce SET estado = ?, revisado_por = ?, fecha_revision = NOW() WHERE id = ?';
-            const [result] = await db.query(sql, [estado, revisado_por, id]);
-            return result.affectedRows > 0;
-        } catch (error) {
-            console.log("Error sql al cancelar permiso:", error);
-            throw error;
-        }
-    },
+    cancelarPermiso: (estado, id, actor, previo) => require('../seguridad/acceso').cambiarEstado('permisos_goce', estado, id, actor, previo),
     obtenerTodos: async () => {
         try {
             const sql = `SELECT 
@@ -89,7 +80,7 @@ ORDER BY pg.fecha_solicitud DESC;`;
             const [datos] = await db.execute(sql);
             return datos;
         } catch (error) {
-            console.error("Error al obtener todos los permisos", error);
+            console.error("Error al obtener todos los permisos", error.code);
             throw error;
         }
     },
@@ -117,7 +108,7 @@ ORDER BY pg.fecha_solicitud DESC;`;
             const [rows] = await db.execute(sql, [usuario_id]);
             return rows[0].total || 0;
         } catch (error) {
-            console.error("Error en contador cuatrimestral", error);
+            console.error("Error en contador cuatrimestral", error.code);
             return 0;
         }
     },

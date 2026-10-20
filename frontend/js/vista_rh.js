@@ -1,7 +1,7 @@
 //direccion de la api para hacer consultas
 const URL_BASE = '/api';
 //conexion para recibir avisos al momento
-const socket = io();
+const socket = Seguridad.socket();
 //lista para guardar todos los registros
 let registrosGlobales = [];
 //variable para el objeto del calendario de rh
@@ -55,16 +55,15 @@ function mostrarToast(mensaje, tipo = 'success') {
 }
 
 //cuando la pagina este lista arrancamos todo
-document.addEventListener('DOMContentLoaded', () => {
+Seguridad.alCargar(() => {
     modalDetalleRH = new bootstrap.Modal(document.getElementById('modalDetalleRH'));
     document.getElementById('saludo-rh').textContent = `RH: ${usuario.nombre_completo}` || "RRHH";
-   
+
     inicializarMotorPDF();
 
 //configuramos el boton para salir de la cuenta
     document.getElementById('btn-logout').addEventListener('click', () => {
-        sessionStorage.clear();
-        window.location.href = "login.html";
+        Seguridad.salir();
     });
 
 //ajustamos el tamaño del calendario cuando se abre la vista lateral
@@ -99,7 +98,7 @@ async function cargarDatosGenerales() {
         const dataP = await resPases.json();
         const dataM = await resPermisos.json();
 //guardamos los feriados en una variable global
-        window.festivosGlobalesRH = resFest.ok ? await resFest.json() : []; 
+        window.festivosGlobalesRH = resFest.ok ? await resFest.json() : [];
 
 //etiquetamos cada registro para saber que tipo es
         const mPases = (dataP.data || []).map(p => ({ ...p, tipoTramite: 'Pase', fechaClave: p.fecha_uso }));
@@ -111,12 +110,12 @@ async function cargarDatosGenerales() {
 //contamos cuantos tramites lleva cada profesor
         const contadores = {};
         todos.forEach(reg => {
-            const uid = reg.id_usuario; 
-            
+            const uid = reg.id_usuario;
+
             if (!contadores[uid]) {
                 contadores[uid] = { Pase: 0, Permiso: 0 };
             }
-            
+
             //incrementamos el contador de tramites de la persona
             contadores[uid][reg.tipoTramite]++;
             reg.folio_personal = contadores[uid][reg.tipoTramite];
@@ -127,8 +126,8 @@ async function cargarDatosGenerales() {
 //mandamos los datos a dibujar en la pantalla
         pintarDashboardRH(registrosGlobales);
 
-    } catch (e) { 
-        console.error("Error al cargar datos de rh", e); 
+    } catch (e) {
+        console.error("Error al cargar datos de rh", e);
         mostrarToast("Error de conexión con el servidor", "error");
     }
 }
@@ -158,7 +157,7 @@ function pintarDashboardRH(datos) {
                 </div>`;
         } else {
 //dibujamos las tarjetas de cada solicitud pendiente
-            contenedorGrid.innerHTML = pendientes.map(reg => {
+            contenedorGrid.innerHTML = pendientes.map((reg, indice) => {
 
                 const area = reg.area_adscripcion;
                 let alertaChoque = '';
@@ -176,7 +175,7 @@ function pintarDashboardRH(datos) {
                     if (choques.length > 0) {
                         alertaChoque = `
                         <div class="alert alert-danger p-2 mt-3 mb-0 small text-center fw-bold border-danger border-opacity-25 shadow-sm">
-                            <i class="fa-solid fa-triangle-exclamation fa-beat me-1"></i> ¡Alerta! ${choques.length} docente(s) de ${area} ya se ausentará(n) hoy.
+                            <i class="fa-solid fa-triangle-exclamation fa-beat me-1"></i> ¡Alerta! ${choques.length} docente(s) de ${Seguridad.escapeHTML(area)} ya se ausentará(n) hoy.
                         </div>`;
                     }
                 }
@@ -184,33 +183,33 @@ function pintarDashboardRH(datos) {
 //creamos el html de la tarjeta con sus botones
                 return `
                 <div class="col-md-6 col-xl-4">
-                    <div class="card card-action h-100 shadow-sm border-0" 
-                         onclick='verDetallesRRHH(${JSON.stringify(reg)})' 
+                    <div class="card card-action h-100 shadow-sm border-0"
+                         data-detalle="${indice}"
                          style="cursor: pointer;">
-                        
+
                         <div class="card-body p-4">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div class="d-flex align-items-center gap-2">
-                                    
+
                                     <span class="badge rounded-pill bg-secondary bg-opacity-15 text-white px-3 py-2 border border-secondary border-opacity-25">
-                                        ${reg.tipoTramite}
+                                        ${Seguridad.escapeHTML(reg.tipoTramite)}
                                     </span>
                                 </div>
-                                <small class="text-muted fw-bold">${reg.tipoTramite}: ${reg.folio_personal}</small>
+                                <small class="text-muted fw-bold">${Seguridad.escapeHTML(reg.tipoTramite)}: ${Seguridad.escapeHTML(reg.folio_personal)}</small>
                             </div>
-                            
-                            <h5 class="fw-bold mb-1 text-dark">${reg.nombre_completo}</h5>
+
+                            <h5 class="fw-bold mb-1 text-dark">${Seguridad.escapeHTML(reg.nombre_completo)}</h5>
                             <p class="text-muted small mb-0">
-                                <i class="fa-solid fa-calendar-day me-2"></i>${reg.fecha_uso_h || reg.fecha_inicio_h}
+                                <i class="fa-solid fa-calendar-day me-2"></i>${Seguridad.escapeHTML(reg.fecha_uso_h || reg.fecha_inicio_h)}
                             </p>
-                            
+
                             ${alertaChoque}
 
                             <div class="d-flex justify-content-end align-items-center pt-3 mt-3 border-top">
                                 <div class="d-flex gap-2">
-                                    <button onclick="event.stopPropagation(); confirmarAccionRH(this, ${reg.id}, 'Aprobado', '${reg.tipoTramite}')" 
+                                    <button data-estado="Aprobado"
                                             class="btn btn-success btn-confirm-rh shadow-sm">Aprobar</button>
-                                    <button onclick="event.stopPropagation(); confirmarAccionRH(this, ${reg.id}, 'Rechazado', '${reg.tipoTramite}')" 
+                                    <button data-estado="Rechazado"
                                             class="btn btn-danger btn-confirm-rh shadow-sm">Rechazar</button>
                                 </div>
                             </div>
@@ -223,7 +222,7 @@ function pintarDashboardRH(datos) {
 
 //llenamos la tabla de abajo con el historial completo
     if (tablaHistorial) {
-        tablaHistorial.innerHTML = historial.length === 0 ? '<tr><td colspan="6" class="text-center py-4">No hay historial</td></tr>' : historial.map(reg => {
+        tablaHistorial.innerHTML = historial.length === 0 ? '<tr><td colspan="6" class="text-center py-4">No hay historial</td></tr>' : historial.map((reg, indice) => {
 //ponemos colores a los estados para diferenciar rapido
             const colorBadge = reg.estado === 'Aprobado' ? 'bg-success' :
                 (reg.estado === 'Vo.Bo.' ? 'bg-info text-white' :
@@ -231,18 +230,31 @@ function pintarDashboardRH(datos) {
 
 //agregamos la fila a la tabla con los datos
             return `
-            <tr onclick='verDetallesRRHH(${JSON.stringify(reg)})' style="cursor:pointer">
-                <td class="text-muted fw-bold">N. ${reg.folio_personal}</td>
-                <td><span class="badge bg-secondary text-white border">${reg.tipoTramite}</span></td>
-                <td class="fw-bold">${reg.nombre_completo}</td>
-                <td>${reg.fecha_uso_h || reg.fecha_inicio_h}</td>
-                <td><span class="badge ${colorBadge}">${reg.estado}</span></td>
-                <td class="text-muted fw-bold" title="${reg.motivo}">
-                ${(reg.motivo || '').length > 30 ? reg.motivo.substring(0, 30) + '...' : (reg.motivo || 'Sin motivo')}
+            <tr data-detalle="${indice}" style="cursor:pointer">
+                <td class="text-muted fw-bold">N. ${Seguridad.escapeHTML(reg.folio_personal)}</td>
+                <td><span class="badge bg-secondary text-white border">${Seguridad.escapeHTML(reg.tipoTramite)}</span></td>
+                <td class="fw-bold">${Seguridad.escapeHTML(reg.nombre_completo)}</td>
+                <td>${Seguridad.escapeHTML(reg.fecha_uso_h || reg.fecha_inicio_h)}</td>
+                <td><span class="badge ${colorBadge}">${Seguridad.escapeHTML(reg.estado)}</span></td>
+                <td class="text-muted fw-bold" title="${Seguridad.escapeHTML(reg.motivo)}">
+                ${Seguridad.escapeHTML((reg.motivo || '').length > 30 ? reg.motivo.substring(0, 30) + '...' : (reg.motivo || 'Sin motivo'))}
                 </td>
             </tr>`;
         }).join('');
     }
+
+    [[contenedorGrid, pendientes], [tablaHistorial, historial]].forEach(([contenedor, registros]) => {
+        contenedor?.querySelectorAll('[data-detalle]').forEach(elemento => {
+            const reg = registros[Number(elemento.dataset.detalle)];
+            elemento.addEventListener('click', () => verDetallesRRHH(reg));
+            elemento.querySelectorAll('[data-estado]').forEach(boton => {
+                boton.addEventListener('click', event => {
+                    event.stopPropagation();
+                    confirmarAccionRH(boton, reg.id, boton.dataset.estado, reg.tipoTramite);
+                });
+            });
+        });
+    });
 
 //si el calendario existe lo refrescamos con los nuevos datos
     if (calendarioRH) {
@@ -416,7 +428,7 @@ function procesarFiltrosRH() {
 
 //filtramos la lista grande de registros uno por uno
     const res = registrosGlobales.filter(r => {
-        const fClave = r.fechaClave.split('T')[0]; 
+        const fClave = r.fechaClave.split('T')[0];
         const f = new Date(r.fechaClave);
         const areaDoc = (r.area_adscripcion || '').toLowerCase();
 
@@ -534,38 +546,33 @@ function confirmarAccionRH(btn, id, estado, tipo) {
 
 
 
-//funcion para bajar la info a un archivo de excel
+// Cada celda conserva su contenido y evita que Excel la interprete como fórmula.
+function celdaCSV(valor) {
+    let texto = String(valor ?? '');
+    if (/^\s*[=+\-@]/.test(texto)) texto = "'" + texto;
+    return '"' + texto.replace(/"/g, '""') + '"';
+}
+
 function exportarExcel() {
-//si no hay datos guardados avisamos y paramos todo
     if (!registrosGlobales.length) return mostrarToast("No hay datos para exportar", "info");
-
-//empezamos a armar el texto del archivo con sus titulos arriba
-    let csvContent = "data:text/csv;charset=utf-8,";
-    csvContent += "ID Tramite,Tipo,Docente,Area Adscripcion,Fecha Evento,Estado,Revisado Por,Motivo\n";
-
-//recorremos la lista completa para ir pegando cada fila
-    registrosGlobales.forEach(reg => {
-        const area = reg.area_adscripcion || 'No Registrada';
-        const revisor = reg.revisado_por_nombre || 'N/A';
-        const fecha = reg.fecha_uso_h || reg.fecha_inicio_h;
-//quitamos comas y saltos de linea para que no se mueva el excel
-        const motivoLimpio = (reg.motivo || 'Sin motivo').replace(/,/g, ' ').replace(/\n/g, ' ');
-
-//juntamos todos los campos separados por una coma
-        const row = `${reg.id},${reg.tipoTramite},${reg.nombre_completo},${area},${fecha},${reg.estado},${revisor},${motivoLimpio}`;
-        csvContent += row + "\n";
-    });
-
-//convertimos el texto a un formato que el navegador entienda como archivo
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-//le ponemos un nombre automatico al archivo con la fecha actual
-    link.setAttribute("download", `Reporte_RRHH_UTM_${new Date().toISOString().split('T')[0]}.csv`);
+    const filas = [
+        ['ID Tramite', 'Tipo', 'Docente', 'Area Adscripcion', 'Fecha Evento', 'Estado', 'Revisado Por', 'Motivo'],
+        ...registrosGlobales.map(reg => [
+            reg.id, reg.tipoTramite, reg.nombre_completo, reg.area_adscripcion || 'No Registrada',
+            reg.fecha_uso_h || reg.fecha_inicio_h, reg.estado, reg.revisado_por_nombre || 'N/A',
+            reg.motivo || 'Sin motivo'
+        ])
+    ];
+    const contenido = filas.map(fila => fila.map(celdaCSV).join(',')).join('\r\n');
+    const archivo = new Blob(['\ufeff', contenido], { type: 'text/csv;charset=utf-8' });
+    const enlace = URL.createObjectURL(archivo);
+    const link = document.createElement('a');
+    link.href = enlace;
+    link.download = `Reporte_RRHH_UTM_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
-//hacemos un clic automatico para que empiece la descarga y luego borramos el link
     link.click();
-    document.body.removeChild(link);
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(enlace), 1000);
     mostrarToast("Reporte descargado exitosamente");
 }
 

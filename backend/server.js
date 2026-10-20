@@ -5,18 +5,37 @@ const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
+const { autenticar } = require('./seguridad/sesiones');
+const validarToken = require('./validacion/valLogin');
+const { soloRoles } = require('./seguridad/acceso');
 
 // Inicializamos app primero para poder usarla en el server
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "*" } 
+    cors: { origin: false },
+    maxHttpBufferSize: 32768
 });
 
-app.use(cors());
+io.use(async (socket, next) => {
+    try {
+        const { usuario, claims } = await autenticar(socket.handshake.auth?.token);
+        if (!['Docente', 'Administrador', 'RRHH'].includes(usuario.rol) || usuario.debe_cambiar_password) throw new Error('INVALID_SESSION');
+        socket.data.usuario = usuario;
+        socket.data.expiry = claims.exp * 1000;
+        next();
+    } catch { next(new Error('Sesión no autorizada.')); }
+});
+io.on('connection', socket => {
+    socket.join(`usuario:${socket.data.usuario.id}`);
+    if (['Administrador', 'RRHH'].includes(socket.data.usuario.rol)) socket.join('revision');
+    const timer = setTimeout(() => socket.disconnect(true), Math.max(0, socket.data.expiry - Date.now()));
+    timer.unref();
+    socket.once('disconnect', () => clearTimeout(timer));
+});
 //midlewares
-app.use(express.json());
+app.use(express.json({ limit: '32kb' }));
+app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 app.use(cookieParser());
 //seguridad desactivada por el momento
 app.use(helmet({
@@ -51,13 +70,19 @@ app.get('/api/salud', async (req, res) => {
     }
 });
 
-app.get('/api/dias/ver', async (req, res) => {
+app.get('/api/dias/ver', validarToken, soloRoles('Docente', 'Administrador', 'RRHH'), async (req, res) => {
     try {
         const [rows] = await db.execute("SELECT fecha, descripcion FROM dias_festivos");
         res.json(rows);
     } catch (error) {
         res.status(500).json({ ok: false, msg: "Error al obtener festivos" });
     }
+});
+
+app.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+    const status = error.type === 'entity.too.large' ? 413 : error.type === 'entity.parse.failed' ? 400 : 500;
+    res.status(status).json({ ok: false, msg: status === 413 ? 'Solicitud demasiado grande.' : status === 400 ? 'JSON inválido.' : 'No se pudo completar la solicitud.' });
 });
 
 async function iniciar() {

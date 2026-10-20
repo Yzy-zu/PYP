@@ -1,23 +1,20 @@
-const jwt = require('jsonwebtoken');
+const { autenticar } = require('../seguridad/sesiones');
 
-//creamos unc funcion para validar tokens y nadie haga nada malo si no esta en la db
-const validarToken = (req, res, next) => {
-    //extraemos el token del header
-    const token = req.header('x-token');
-    //sino existe lo volamos
-    if(!token){
-        return res.status(401).json({msg: 'Permisp denegado'});
+async function validarToken(req, res, next) {
+    try {
+        const { usuario, claims } = await autenticar(req.header('x-token'));
+        req.usuario = usuario;
+        req.sesion = claims;
+        const permitidas = ['/api/login/perfil', '/api/login/ntoken', '/api/login/npassword', '/api/login/logout'];
+        if (usuario.debe_cambiar_password && !permitidas.includes(req.originalUrl.split('?')[0])) {
+            return res.status(403).json({ ok: false, code: 'PASSWORD_CHANGE_REQUIRED', msg: 'Debes cambiar la contraseña temporal.' });
+        }
+        next();
+    } catch (error) {
+        if (error.code?.startsWith('ER_') || ['ECONNREFUSED', 'ETIMEDOUT'].includes(error.code)) {
+            return res.status(503).json({ ok: false, msg: 'No se pudo comprobar la sesión.' });
+        }
+        res.status(401).json({ ok: false, msg: 'Sesión inválida o vencida. Inicia sesión de nuevo.' });
     }
-        try{
-            //verificamos que el token del header coincida con el secreto 
-            const {id, rol, nombre_completo} = jwt.verify(token, process.env.JWT_SECRET); // <-- Ajustado
-            //metemos los datos en usuario para usarlos
-            req.usuario = {id, rol, nombre_completo}; // <-- Ajustado
-            //le damos el pase a la siguiente ruta
-            next();
-            //si algo sale mal avisamos
-        } catch(error){
-            res.status(401).json({msg: 'TOKEN NO VALIDO'});
-        }}
-//exportamos esta funcion        
+}
 module.exports = validarToken;

@@ -1,48 +1,30 @@
-const API = '/api/root';
+// Las altas requieren la sesión de administración técnica.
 const formulario = document.getElementById('formulario');
-const nombre = document.getElementById('name');
-const correo = document.getElementById('mail');
-const fecha = document.getElementById('date');
-const contra = document.getElementById('pass');
-const categoria = document.getElementById('categoria');
-const rfc = document.getElementById('rfc');
-const fechaI = document.getElementById('date_ingreso');
-const tipo = document.getElementById('tipo');
-const contrato = document.getElementById('contrato');
-
-
-formulario.addEventListener('submit', async (event) => {
+const aviso = document.createElement('p');
+aviso.setAttribute('role', 'alert');
+formulario.appendChild(aviso);
+const tokenAdmin = sessionStorage.getItem('sys_tkn');
+if (!tokenAdmin) {
+    aviso.textContent = 'Solicita tu cuenta a la administración. El registro requiere acceso administrativo.';
+    formulario.querySelectorAll('input,select,button').forEach(el => { el.disabled = true; });
+}
+formulario.addEventListener('submit', async event => {
     event.preventDefault();
-
+    if (!tokenAdmin) return;
+    const valor = id => document.getElementById(id)?.value || null;
     const datos = {
-        nombre_completo: nombre.value,
-        correo_institucional: correo.value,
-        contraseña: contra.value,
-        rol: "Docente",
-        fecha_nacimiento: fecha.value,
-        rfc: rfc ? rfc.value : "FERF450822FB1",
-        fecha_ingreso: fechaI ? fechaI.value : "2009-12-12",
-        categoria: tipo ? tipo.value : "Profesor de Asignatura",
-        area_adscripcion: categoria.value,
-        tipo_contrato: contrato ? contrato.value : "Determinado"
+        nombre_completo: valor('name'), correo_institucional: valor('mail'), contraseña: valor('pass') || '',
+        rol: 'Docente', fecha_nacimiento: valor('date'), rfc: valor('rfc'), fecha_ingreso: valor('date_ingreso'),
+        categoria: valor('tipo') || 'Profesor de Asignatura', area_adscripcion: valor('categoria'),
+        tipo_contrato: valor('contrato') || 'Determinado'
     };
     try {
-        const envio = await fetch(`${API}/usuarios`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(datos)
+        const respuesta = await fetch('/api/root/usuarios', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-token': tokenAdmin }, body: JSON.stringify(datos)
         });
-        if (envio.ok) {
-            const resultado = await envio.json();
-            alert("Registro creado con exito");
-            window.location.replace("../login.html");
-        } else {
-            console.error("Error en el servidor");
-
-        }
-    } catch (error) {
-        console.error("Error de red:", error);
-    }
-})
+        const resultado = await respuesta.json();
+        aviso.textContent = resultado.ok ? 'Cuenta creada. El usuario deberá cambiar su contraseña inicial.' : resultado.msg || 'No se pudo crear la cuenta.';
+        if (resultado.passwordTemporal) alert('Contraseña temporal: ' + resultado.passwordTemporal);
+        if (resultado.ok) formulario.reset();
+    } catch { aviso.textContent = 'No se pudo conectar con el servidor.'; }
+});

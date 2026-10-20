@@ -14,7 +14,7 @@ const pasesql = {
             const [datos] = await db.execute(sql, [id]);
             return datos;
         } catch (error) {
-            console.error("Error al obtener pases docente", error);
+            console.error("Error al obtener pases docente", error.code);
             throw error;
         }
     },
@@ -36,7 +36,7 @@ ORDER BY p.fecha_solicitud DESC`;
             const [datos] = await db.execute(sql);
             return datos;
         } catch (error) {
-            console.error("Error en obtenerTodos", error);
+            console.error("Error en obtenerTodos", error.code);
             throw error;
         }
     },
@@ -54,7 +54,7 @@ ORDER BY p.fecha_solicitud DESC`;
             const [rows] = await db.execute(sql, [usuario_id]);
             return rows[0].total || 0;
         } catch (error) {
-            console.error("Error en contador", error);
+            console.error("Error en contador", error.code);
             return 0;
         }
     },
@@ -68,23 +68,16 @@ ORDER BY p.fecha_solicitud DESC`;
         } catch (error) { throw error; }
     },
     //consulta para modificar pase existente solo si el estado es "pendiente"
-    modPase: async (fU, hI, hF, motivo, id) => {
+    modPase: async (fU, hI, hF, motivo, id, usuarioId) => {
         try {
-            const sql = `UPDATE pases_salida SET fecha_uso = ?, hora_inicio = ?, hora_fin = ?, motivo = ? WHERE id = ?`;
-            const [datos] = await db.execute(sql, [fU, hI, hF, motivo, id]);
+            const sql = `UPDATE pases_salida SET fecha_uso = ?, hora_inicio = ?, hora_fin = ?, motivo = ? WHERE id = ? AND usuario_id=? AND estado='Pendiente'`;
+            const [datos] = await db.execute(sql, [fU, hI, hF, motivo, id, usuarioId]);
             return datos;
         } catch (error) { throw error; }
     },
     //consulta para cancelar un pase
     // En tu archivo de modelos SQL:
-    cancelarPase: async (estado, id, revisado_por) => {
-        // Usamos NOW() para que MariaDB ponga la fecha y hora exacta de la revision
-        const sql = `UPDATE pases_salida 
-                 SET estado = ?, revisado_por = ?, fecha_revision = NOW() 
-                 WHERE id = ?`;
-        const [result] = await db.query(sql, [estado, revisado_por, id]);
-        return result.affectedRows > 0;
-    },
+    cancelarPase: (estado, id, actor, previo) => require('../seguridad/acceso').cambiarEstado('pases_salida', estado, id, actor, previo),
 
     //consulta para buscar pase por id
     buscarPasePorId: async (id) => {
@@ -98,7 +91,7 @@ ORDER BY p.fecha_solicitud DESC`;
             const [datos] = await db.execute(sql, [id]);
             return datos[0] || null;
         } catch (error) {
-            console.error("Error al buscar por id", error);
+            console.error("Error al buscar por id", error.code);
             throw error;
         }
     },

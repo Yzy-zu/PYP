@@ -24,7 +24,7 @@ formulario.addEventListener("submit", async (e) => {
     errorGlobal.style.display = "none";
 
     const correo = correoInput.value.trim();
-    const contraseña = contraseñaInput.value.trim();
+    const contraseña = contraseñaInput.value;
 
     if (correo === "") {
         errorCorreo.textContent = "Ingrese su correo institucional";

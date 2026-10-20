@@ -49,4 +49,31 @@ El dump necesita un cliente compatible con `DELIMITER`; la herramienta utiliza e
 
 ## Alcance actual
 
-Fase 1: recuperación y arranque local. Los defectos de autorización, HTML, cupos y aprobaciones descritos en [el análisis](ANALISIS_PDF_SQL_2026-10-20.md) se corregirán en las fases siguientes. Mantener esta versión en localhost y usar las cuentas ficticias. La restauración conserva los triggers originales para tener un punto de partida verificable.
+Fases 1 y 2: recuperación, arranque y controles básicos de seguridad. Mantener la demo en localhost con datos ficticios mientras se completan las reglas y los documentos. Los cupos/cumpleaños y el historial de ambas revisiones siguen pendientes en las fases siguientes. La restauración conserva los triggers originales.
+
+## Seguridad de fase 2
+
+`npm run setup:local` y `npm run db:up` aplican [002_seguridad.sql](backend/bd/migraciones/002_seguridad.sql) solamente a la base demo. Añade cuenta activa, versión de sesión y cambio obligatorio de contraseña; el respaldo conserva sus columnas originales.
+
+| Perfil | Acceso |
+| --- | --- |
+| Docente | Solicita; consulta lo propio; edita/cancela únicamente lo propio Pendiente |
+| Jefatura (`Administrador` en BD) | Consulta todas las áreas, da Vo.Bo. o rechaza Pendiente |
+| RH | Consulta el conjunto, aprueba/rechaza después de Vo.Bo.; accede a datos laborales necesarios |
+| Administración técnica (`Sysadmin`) | Acceso separado en `/Rlogin.html` para cuentas, festivos y operaciones administrativas |
+
+Cambiar contraseña, resetear, modificar rol o desactivar una cuenta invalida sus tokens anteriores. Cerrar sesión invalida las sesiones de esa cuenta y desconecta sus sockets. La administración técnica mantiene sesiones en memoria: reiniciar Node exige volver a autenticarse en ese panel. Los tokens anteriores a esta fase también requieren nuevo login.
+
+Las contraseñas nuevas requieren 10 caracteres como mínimo y hasta 72 bytes; la clave técnica de `.env` requiere 12 caracteres como mínimo. Altas y resets generan una contraseña temporal si corresponde, que se muestra una sola vez al administrador y obliga al usuario a cambiarla antes de operar. Se desactivan cuentas conservando sus expedientes.
+
+Las pantallas verifican la sesión antes de iniciar, escapan texto de usuarios y autentican sockets. Los avisos de un trámite llegan a su propietario y a revisores; no a otros docentes. El CSV neutraliza fórmulas y escapa celdas. El correo permanece desactivado para la demo.
+
+El login tiene límites en memoria por proceso: 30 intentos por cuenta y 150 por IP en 15 minutos; devuelve 429 al agotarlos. El reinicio vacía esos límites. Se restringen cuerpos JSON a 32 KiB. La CSP estricta y una política de alta institucional/dominio no forman parte de esta entrega; las pantallas todavía tienen acciones inline heredadas.
+
+Con el servidor y la demo activos:
+
+```sh
+npm run check:security
+```
+
+Ese comando crea fixtures ficticios, comprueba accesos/sesiones/estados y los elimina al terminar. Se niega a ejecutarse contra una base distinta de `_demo`, una API remota o con correo habilitado. Ver [FASE_2_SEGURIDAD.md](FASE_2_SEGURIDAD.md) para resultados y límites.

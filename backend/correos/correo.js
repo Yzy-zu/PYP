@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const { emailEnabled } = require('../config/env');
+const escapar = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 
 //servicios de correo
 const transporter = emailEnabled ? nodemailer.createTransport({
@@ -30,11 +31,11 @@ const enviarNotificacionEstado = async (emailDestino, nombreDocente, tramite, es
         subject: `Actualización de tu ${tramite}: ${estado}`,
         html: `
             <div style="font-family: 'Segoe UI', sans-serif; max-width: 500px; border: 1px solid #eee; border-radius: 10px; padding: 20px;">
-                <h2 style="color: #009186; text-align: center;">Hola, ${nombreDocente}</h2>
-                <p style="font-size: 16px; color: #333;">Te informamos que tu solicitud de <strong>${tramite}</strong> ha sido actualizada por la subdirección.</p>
+                <h2 style="color: #009186; text-align: center;">Hola, ${escapar(nombreDocente)}</h2>
+                <p style="font-size: 16px; color: #333;">Te informamos que tu solicitud de <strong>${escapar(tramite)}</strong> ha sido actualizada.</p>
                 
                 <div style="background-color: ${colorEstado}; color: white; padding: 15px; text-align: center; border-radius: 8px; font-size: 1.2rem; font-weight: bold; margin: 20px 0;">
-                    ESTADO: ${estado.toUpperCase()}
+                    ESTADO: ${escapar(estado.toUpperCase())}
                 </div>
 
                 <p style="font-size: 14px; color: #666; text-align: center;">Puedes consultar los detalles completos iniciando sesión.</p>
@@ -46,9 +47,9 @@ const enviarNotificacionEstado = async (emailDestino, nombreDocente, tramite, es
 
     try {
         await transporter.sendMail(mailOptions);
-        console.log(`correo enviado ${emailDestino}`);
+        console.log('[correo] Notificación enviada.');
     } catch (error) {
-        console.error('error al enviar correo:', error);
+        console.error('[correo] No se pudo enviar:', error.code || 'error de transporte');
     }
 };
 

@@ -32,6 +32,7 @@
             const data = await res.json();
             if(data.ok) {
                 sessionStorage.setItem('sys_tkn', data.token);
+                sessionStorage.setItem('sys_usuario', JSON.stringify(data.usuario));
                 window.location.href = 'root.html';
             } else { alert('ACCESS_DENIED'); }
         };

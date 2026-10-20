@@ -1,7 +1,7 @@
 //direccion de la api
 const URL_BASE = '/api';
 //conexion para recibir cambios en vivo
-const socket = io();
+const socket = Seguridad.socket();
 //aca guardamos el objeto del calendario
 let calendarioOficial;
 //ventana para pedir solicitudes
@@ -80,7 +80,7 @@ function actualizarBadges(registros) {
 }
 
 //cuando la pagina ya cargo todo esto arranca
-document.addEventListener('DOMContentLoaded', () => {
+Seguridad.alCargar(() => {
     //creamos las ventanas modales de bootstrap
     modalInstancia = new bootstrap.Modal(document.getElementById('modalSolicitud'));
     modalSemanaFABInstancia = new bootstrap.Modal(document.getElementById('modalSemanaFAB'));
@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     //configuramos el boton para cerrar sesion
-    document.getElementById('btn-logout').addEventListener('click', manejarSesionExpirada);
+    document.getElementById('btn-logout').addEventListener('click', () => Seguridad.salir());
 
     //si elige pase mostramos ese formulario
     document.getElementById('btn-elegir-pase').addEventListener('click', () => {
@@ -567,27 +567,33 @@ function pintarHistorial(registros) {
         div.innerHTML = `
             <div class="card-body p-2">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                    <span class="fw-bold small text-truncate pe-2" style="max-width: 65%;">${reg.motivo || 'Sin motivo'}</span>
-                    <span class="text-muted" style="font-size: 0.75rem;">${fechaParaMostrar}</span>
+                    <span class="fw-bold small text-truncate pe-2" style="max-width: 65%;">${Seguridad.escapeHTML(reg.motivo || 'Sin motivo')}</span>
+                    <span class="text-muted" style="font-size: 0.75rem;">${Seguridad.escapeHTML(fechaParaMostrar)}</span>
                 </div>
                 <div class="d-flex justify-content-between align-items-center mt-1">
                     <span class="badge ${reg.estado === 'Aprobado' ? 'bg-success' :
                 (reg.estado === 'Vo.Bo.' ? 'bg-info text-white' :
                     (reg.estado === 'Pendiente' ? 'bg-warning text-dark' : 'bg-danger'))
-            }" style="font-size: 0.65rem;">${reg.estado}
+            }" style="font-size: 0.65rem;">${Seguridad.escapeHTML(reg.estado)}
                     </span>
                     <span class="badge ${reg.tipoTramite === 'Permiso' ? 'bg-success' :
                 (reg.tipoTramite === 'Pase' ? 'bg-info text-white' : 'bg-secondary')
             }"
-                 style="font-size: 0.65rem;">${reg.tipoTramite}
+                 style="font-size: 0.65rem;">${Seguridad.escapeHTML(reg.tipoTramite)}
                     </span>
                     ${reg.estado === 'Pendiente' ? `
                         <div class="btn-group" onclick="event.stopPropagation()">
-                            <button class="btn btn-sm btn-outline-primary p-1" onclick="prepararEdicion('${reg.tipoTramite}', ${reg.id})"><i class="fa-solid fa-pen" style="font-size: 0.7rem;"></i></button>
-                            <button class="btn btn-sm btn-outline-danger p-1" onclick="cancelarSolicitud('${reg.tipoTramite}', ${reg.id})"><i class="fa-solid fa-trash" style="font-size: 0.7rem;"></i></button>
+                            <button class="btn btn-sm btn-outline-primary p-1" data-editar="true"><i class="fa-solid fa-pen" style="font-size: 0.7rem;"></i></button>
+                            <button class="btn btn-sm btn-outline-danger p-1" data-cancelar="true"><i class="fa-solid fa-trash" style="font-size: 0.7rem;"></i></button>
                         </div>` : ''}
                 </div>
             </div>`;
+        div.querySelector('[data-editar]')?.addEventListener('click', (event) => {
+            event.stopPropagation(); prepararEdicion(reg.tipoTramite, reg.id);
+        });
+        div.querySelector('[data-cancelar]')?.addEventListener('click', (event) => {
+            event.stopPropagation(); cancelarSolicitud(reg.tipoTramite, reg.id);
+        });
         contenedor.appendChild(div);
     });
 }
@@ -634,7 +640,7 @@ function cancelarSolicitud(tipo, id) {
         <div class="text-center">
             <i class="fa-solid fa-circle-exclamation text-danger mb-3" style="font-size: 3rem;"></i>
             <h5 class="mb-2">¿Confirmas la cancelación?</h5>
-            <p class="text-muted">Estás a punto de cancelar tu <strong>${tipo}</strong> con folio <strong>#${id}</strong>.</p>
+            <p class="text-muted">Estás a punto de cancelar tu <strong>${Seguridad.escapeHTML(tipo)}</strong> con folio <strong>#${Seguridad.escapeHTML(id)}</strong>.</p>
             <div class="alert alert-warning py-2 small">
                 <i class="fa-solid fa-info-circle me-1"></i> Esta acción no se puede deshacer.
             </div>
@@ -663,7 +669,7 @@ document.getElementById('form-pedir-pase').addEventListener('submit', (e) => {
 //decidimos si vamos a crear uno nuevo o a modificar uno viejo
     urlPendiente = editandoId ? `${URL_BASE}/pases/mod` : `${URL_BASE}/pases/crear`;
     metodoPendiente = editandoId ? 'PATCH' : 'POST';
-    document.getElementById('conf-resumen').innerHTML = `<strong>Pase</strong>: ${fechaUso} de ${hInicio} a ${hFin}`;
+    document.getElementById('conf-resumen').innerHTML = `<strong>Pase</strong>: ${Seguridad.escapeHTML(fechaUso)} de ${Seguridad.escapeHTML(hInicio)} a ${Seguridad.escapeHTML(hFin)}`;
     modalConfirmacionInstancia.show();
 });
 
@@ -693,7 +699,7 @@ document.getElementById('form-pedir-permiso').addEventListener('submit', (e) => 
 //preparamos la ruta de la api para guardar los cambios
     urlPendiente = editandoId ? `${URL_BASE}/permisos/mod` : `${URL_BASE}/permisos/crear`;
     metodoPendiente = editandoId ? 'PATCH' : 'POST';
-    document.getElementById('conf-resumen').innerHTML = `<strong>Permiso</strong>: ${tipo} del ${fechaI} al ${fechaF}`;
+    document.getElementById('conf-resumen').innerHTML = `<strong>Permiso</strong>: ${Seguridad.escapeHTML(tipo)} del ${Seguridad.escapeHTML(fechaI)} al ${Seguridad.escapeHTML(fechaF)}`;
     modalConfirmacionInstancia.show();
 });
 
@@ -867,7 +873,7 @@ function renderizarBarra(tipo, usados) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+Seguridad.alCargar(() => {
 //apenas carga la pagina pedimos el presupuesto para mostrarlo
     actualizarPresupuestoSalidas();
 });

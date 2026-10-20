@@ -2,6 +2,7 @@
 const pasesSql = require('../modelos/sqlPase');
 const { enviarNotificacionEstado } = require('../correos/correo');
 const sqlValidaciones = require('../modelos/sqlDias');
+const { notificar } = require('../seguridad/acceso');
 
 
 const pasesControlador = {
@@ -48,13 +49,12 @@ const pasesControlador = {
             }
 
             const resultado = await pasesSql.crearPase(usuario_id, fecha_uso, hora_inicio, hora_fin, motivo);
-            const io = req.app.get('socketio');
-            io.emit('nuevo-pase-creado', { msg: 'Un docente solicitó un pase' });
+            req.app.get('socketio').to('revision').emit('nuevo-pase-creado', { msg: 'Un docente solicitó un pase' });
             res.json({ ok: true, msg: "Pase creado con éeito" });
 
 
         } catch (error) {
-            console.error(error);
+            console.error('Error de operación:', error.code || 'UNKNOWN');
             res.status(500).json({ ok: false, msg: "error de servidor al crear pase" });
         }
     },
@@ -85,19 +85,16 @@ const pasesControlador = {
         const { id, cancelar } = req.body; // 'id' es el del pase, 'cancelar' es el nuevo estado
         try {
             //extraemos el id de quien realiza la accion (el admin) desde el token
-            const revisado_por = req.usuario.id;
-            const paseActualizado = await pasesSql.cancelarPase(cancelar, id, revisado_por);
+            const paseActualizado = await pasesSql.cancelarPase(cancelar, id, req.usuario, req.tramite.estado);
 
             if (!paseActualizado) {
-                return res.status(404).json({ ok: false, msg: "algo no salio bien al actualizar" });
+                return res.status(409).json({ ok: false, msg: 'El trámite cambió. Actualiza la pantalla.' });
             }
 
             const docente = await pasesSql.obtenerInfoDocentePorPase(id);
 
             //socket para avisar en tiempo real
-            const io = req.app.get('socketio');
-            io.emit('pase-actualizado', { id, nuevoEstado: cancelar });
-            req.app.get('socketio').emit('actualizar-contadores');
+            notificar(req, 'pase-actualizado', { id, nuevoEstado: cancelar }, req.tramite.usuario_id);
 
             if (docente) {
                 enviarNotificacionEstado(
@@ -108,10 +105,10 @@ const pasesControlador = {
                 );
             }
 
-            res.json({ ok: true, msg: "Pase actualizado y docente notificado correctamente" });
+            res.json({ ok: true, msg: 'Pase actualizado.' });
 
         } catch (error) {
-            console.error("Error en cancelarPase:", error);
+            console.error("Error en cancelarPase:", error.code);
             res.status(500).json({ ok: false, msg: "Error al actualizar estado" });
         }
     },
@@ -120,18 +117,19 @@ const pasesControlador = {
     modificarPase: async (req, res) => {
         try {
             const { id, fecha_uso, hora_inicio, hora_fin, motivo } = req.body;
-            await pasesSql.modPase(fecha_uso, hora_inicio, hora_fin, motivo, id);
-
+            const result = await pasesSql.modPase(fecha_uso, hora_inicio, hora_fin, motivo, id, req.usuario.id);
+            if (!result.affectedRows) return res.status(409).json({ ok: false, msg: 'El trámite cambió. Actualiza la pantalla.' });
+            notificar(req, 'pase-actualizado', { id, nuevoEstado: 'Pendiente' }, req.usuario.id);
             res.json({ ok: true, msg: "Pase modificado correctamente" });
         } catch (error) {
             if (error.errno === 1644 || error.sqlState === '45000') {
                 return res.status(400).json({ ok: false, msg: error.sqlMessage });
             }
-            console.error(error);
+            console.error('Error de operación:', error.code || 'UNKNOWN');
             res.status(500).json({ ok: false, msg: "Error del server al modificar" });
         }
     },
 };
 
 
-module.exports = pasesControlador;1
+module.exports = pasesControlador;

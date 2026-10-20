@@ -19,7 +19,7 @@ const usersql = {
             return datos[0];
         } catch (error) {
             //si algo sale mal obtenemos el error
-            console.error("Error en login", error);
+            console.error("Error en login:", error.code);
             throw error;
         }
     },
@@ -33,16 +33,16 @@ const usersql = {
             const user = datos[0];
             return user;
         } catch (error) {
-            console.error("Error al obtenerID", error);
+            console.error("Error al obtener usuario:", error.code);
             throw error;
         }
     },
     actContraseña: async (password, id) => {
         try {
-            const sql = 'update usuarios set contraseña = ? where id = ?';
+            const sql = 'UPDATE usuarios SET contraseña=?,session_version=session_version+1,debe_cambiar_password=0 WHERE id=? AND activo=1';
             const [datos] = await db.execute(sql, [password, id]);
         } catch (error){
-            console.error("Error al actualziar db", error);
+            console.error("Error al actualizar usuario:", error.code);
             throw error;
         }
     }

@@ -1,7 +1,7 @@
 //direccion para llamar al servidor
 const URL_BASE = '/api';
 //conexion para recibir avisos en vivo
-const socket = io();
+const socket = Seguridad.socket();
 //aca guardamos el calendario del jefe
 let calendarioJefe;
 //ventana para ver la info completa
@@ -61,7 +61,7 @@ function mostrarToast(mensaje, tipo = 'success') {
 }
 
 //cuando la pagina termina de cargar arrancamos todo
-document.addEventListener('DOMContentLoaded', () => {
+Seguridad.alCargar(() => {
 //creamos la ventana modal de los detalles
     modalDetalle = new bootstrap.Modal(document.getElementById('modalDetalleSolicitud'));
 //ponemos el nombre del jefe en la pantalla
@@ -69,8 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 //configuramos el boton para salir de la cuenta
     document.getElementById('btn-logout').addEventListener('click', () => {
-        sessionStorage.clear();
-        window.location.href = "login.html";
+        Seguridad.salir();
     });
 //prendemos el pdf el calendario y traemos los datos
     inicializarMotorPDF();
@@ -206,7 +205,7 @@ function actualizarPantallaJefe(datos) {
     const cumpleaniosAgregados = new Set();
 
 //recorremos los datos filtrados para crear las tarjetas y filas
-    datos.forEach(sol => {
+    datos.forEach((sol, indice) => {
         const esPase = sol.tipoTramite === 'Pase';
         const fechaMostrar = sol.fecha_uso_h || sol.fecha_inicio_h;
         const fechaISO = (esPase ? sol.fecha_uso : sol.fecha_inicio).split('T')[0];
@@ -241,33 +240,46 @@ function actualizarPantallaJefe(datos) {
         if (sol.estado === 'Pendiente') {
             contadorPendientes++;
             listaPendientes.innerHTML += `
-                <div class="solicitud-card small" onclick='verDetallesModal(${JSON.stringify(sol)})' style="cursor: pointer;">
+                <div class="solicitud-card small" data-detalle="${indice}" style="cursor: pointer;">
                     <div class="d-flex justify-content-between mb-1">
-                        <strong class="text-primary fs-6">${sol.nombre_completo}</strong>
-                        <span class="badge bg-secondary fs-6">${sol.tipoTramite}</span>
+                        <strong class="text-primary fs-6">${Seguridad.escapeHTML(sol.nombre_completo)}</strong>
+                        <span class="badge bg-secondary fs-6">${Seguridad.escapeHTML(sol.tipoTramite)}</span>
                     </div>
-                    <p class="text-muted mb-2"><i class="fa-solid fa-calendar-day me-2"></i>${fechaMostrar}</p>
+                    <p class="text-muted mb-2"><i class="fa-solid fa-calendar-day me-2"></i>${Seguridad.escapeHTML(fechaMostrar)}</p>
                     <div class="d-flex gap-2">
-                        <button onclick="event.stopPropagation(); confirmarAccion(this, ${sol.id}, '${esPase ? 'pase' : 'permiso'}', 'Vo.Bo.')" class="btn btn-success btn-sm w-50">Aprobar</button>
-                        <button onclick="event.stopPropagation(); confirmarAccion(this, ${sol.id}, '${esPase ? 'pase' : 'permiso'}', 'Rechazado')" class="btn btn-danger btn-sm w-50">Rechazar</button>
+                        <button data-estado="Vo.Bo." class="btn btn-success btn-sm w-50">Aprobar</button>
+                        <button data-estado="Rechazado" class="btn btn-danger btn-sm w-50">Rechazar</button>
                     </div>
                 </div>`;
         }
 
 //metemos una fila a la tabla de abajo para el historial completo
         tablaEstadisticas.innerHTML += `
-            <tr class="small" onclick='verDetallesModal(${JSON.stringify(sol)})' style="cursor:pointer">
-                <td>${sol.nombre_completo}</td>
-                <td>${sol.tipoTramite}</td>
-                <td>${fechaMostrar}</td>
+            <tr class="small" data-detalle="${indice}" style="cursor:pointer">
+                <td>${Seguridad.escapeHTML(sol.nombre_completo)}</td>
+                <td>${Seguridad.escapeHTML(sol.tipoTramite)}</td>
+                <td>${Seguridad.escapeHTML(fechaMostrar)}</td>
                 <td>
                 <span class="badge ${sol.estado === 'Aprobado' ? 'bg-success' :
                 (sol.estado === 'Vo.Bo.' ? 'bg-info text-white' :
                     (sol.estado === 'Pendiente' ? 'bg-warning text-dark' : 'bg-danger'))
-            }">${sol.estado}
+            }">${Seguridad.escapeHTML(sol.estado)}
                 </span>
                 </td>
             </tr>`;
+    });
+
+    [listaPendientes, tablaEstadisticas].forEach(contenedor => {
+        contenedor.querySelectorAll('[data-detalle]').forEach(elemento => {
+            const sol = datos[Number(elemento.dataset.detalle)];
+            elemento.addEventListener('click', () => verDetallesModal(sol));
+            elemento.querySelectorAll('[data-estado]').forEach(boton => {
+                boton.addEventListener('click', event => {
+                    event.stopPropagation();
+                    confirmarAccion(boton, sol.id, sol.tipoTramite === 'Pase' ? 'pase' : 'permiso', boton.dataset.estado);
+                });
+            });
+        });
     });
 
 //si no hay nada pendiente ponemos un icono de café

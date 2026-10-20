@@ -1,19 +1,29 @@
 const { Router } = require('express');
 const rootCtrl = require('../controladores/conRoot');
-const { validarToken } = require('../validacion/valLogin'); 
+const validarToken = require('../validacion/valLogin');
+const { cuerpoSimple } = require('../seguridad/acceso');
+const { limitarLogin } = require('../seguridad/credenciales');
+const { revocarRoot } = require('../seguridad/sesiones');
 
 const router = Router();
 
-router.post('/login', rootCtrl.loginSysadmin);
+router.use(cuerpoSimple);
+router.post('/login', limitarLogin, rootCtrl.loginSysadmin);
 
 const checkSysadmin = (req, res, next) => {
-    if (req.usuario.rol !== 'Administrador') {
+    if (req.usuario.rol !== 'Sysadmin' || req.usuario.id !== 'SYSADMIN') {
         return res.status(403).json({ ok: false, msg: 'SYS_DENIED' });
     }
     next();
 };
 
 router.use(validarToken, checkSysadmin);
+router.get('/sesion', (req, res) => res.json({ ok: true, usuario: req.usuario }));
+router.post('/logout', (req, res) => { revocarRoot(req.sesion.jti); res.json({ ok: true }); });
+router.param('id', (req, res, next, value) => {
+    if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) return res.status(400).json({ ok: false, msg: 'Identificador inválido.' });
+    next();
+});
 
 router.get('/usuarios', rootCtrl.getUsuarios);
 router.get('/usuarios/:id', rootCtrl.getUsuarioId);
